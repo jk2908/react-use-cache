@@ -1,8 +1,8 @@
 {
-	"name": "react-use-cache",
+	"name": "@jk2908/react-use-cache",
 	"version": "0.1.0",
 	"author": "Jerome Kenway",
-	"description": "A primitives-only Suspense cache for React 19",
+	"description": "A slight upgrade on a simple `Map` cache for `use(Promise)` in React 19",
 	"license": "MIT",
 	"keywords": [
 		"react",

@@ -35,13 +35,12 @@ function User({ id }) {
 }
 ```
 
-- Dedupe across sibling components — fetch runs once
+- Dedupe across sibling components
 - Retries with optional backoff (exponential or fixed); `AbortError` never eats
   a retry slot
-- Abort per entry — explicit, or automatically on LRU eviction
-- LRU eviction with a tunable `maxSize`
-- `useVersion(key)` — re-render a component when a key is invalidated
-- Works with `<Suspense>` and `<ErrorBoundary>`
+- Abort per entry
+- LRU eviction with a customisable `maxSize`
+- `useVersion(key)` - re-render a component when a key is invalidated
 
 ## API
 
@@ -123,7 +122,7 @@ The class is also exported directly, for tests or non-React code. See
 ### Refresh after mutation
 
 Once `use(getUser(id))` has resolved, it won't re-read on its own. `invalidate`
-drops the cache entry and bumps the version — so to make the same component
+drops the cache entry and bumps the version so to make the same component
 re-fetch, subscribe to the version. The bump triggers a re-render; since the
 entry was deleted, `getUser(id)` returns a fresh pending promise that
 re-suspends:
@@ -146,9 +145,9 @@ function User({ id }) {
 
 Alternatively, lift the promise into the parent and pass it as a prop. The
 parent subscribes to the version and creates the promise; the child just
-renders it. On invalidate, the bump triggers a re-render with a new `key`, so
-React mounts a fresh child; `getUser(id)` returns a fresh promise (the entry
-was deleted), and the child's `use(promise)` re-suspends:
+renders it. On invalidate, the bump triggers a re-render, `getUser(id)` returns
+a fresh promise (the entry was deleted), and the child's `use(promise)`
+re-suspends:
 
 ```tsx
 function App({ id }) {
@@ -193,9 +192,6 @@ The cache retries the underlying function up to `retries` times, waiting
 `backoff` ms between attempts. The `'exponential'` strategy doubles the delay
 after each failure (`100 → 200 → 400 …`); `'fixed'` holds it steady at
 `backoff`. Pass `backoff: 0` (the default) to retry back-to-back with no wait.
-
-`AbortError` short-circuits both the retry loop and any in-flight wait — the
-promise surfaces to the boundary immediately.
 
 ### Prefix invalidation
 
