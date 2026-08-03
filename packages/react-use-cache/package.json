@@ -1,0 +1,67 @@
+{
+	"name": "react-use-cache",
+	"version": "0.1.0",
+	"author": "Jerome Kenway",
+	"description": "A primitives-only Suspense cache for React 19",
+	"license": "MIT",
+	"keywords": [
+		"react",
+		"react19",
+		"suspense",
+		"cache",
+		"dedupe",
+		"abort",
+		"fetch"
+	],
+	"homepage": "https://github.com/jk2908/react-use-cache#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/jk2908/react-use-cache.git"
+	},
+	"bugs": {
+		"url": "https://github.com/jk2908/react-use-cache/issues"
+	},
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"src",
+		"CHANGELOG.md"
+	],
+	"publishConfig": {
+		"access": "public"
+	},
+	"scripts": {
+		"build": "bun run ./build.ts && bun x tsc --project tsconfig.json --emitDeclarationOnly",
+		"prepack": "bun run build",
+		"test": "bunx vitest"
+	},
+	"dependencies": {
+		"devalue": "^5.8.2"
+	},
+	"devDependencies": {
+		"@testing-library/jest-dom": "^7.0.0",
+		"@testing-library/react": "^16.3.2",
+		"@testing-library/user-event": "^14.6.1",
+		"@types/bun": "^1.3.14",
+		"@types/react": "^19.2.17",
+		"@types/react-dom": "^19.2.3",
+		"jsdom": "^30.0.1",
+		"react": "^19.2.7",
+		"react-dom": "^19.2.7",
+		"react-error-boundary": "^6.1.2",
+		"typescript": "^5",
+		"vitest": "^4.1.10"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0",
+		"react-dom": "^19.0.0"
+	}
+}
