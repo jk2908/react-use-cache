@@ -2,7 +2,6 @@
   "name": "react-use-cache-monorepo",
   "version": "0.3.0",
   "author": "Jerome Kenway",
-  "private": true,
   "type": "module",
   "workspaces": ["packages/*", "examples/*"],
   "devDependencies": {

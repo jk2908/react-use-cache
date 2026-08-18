@@ -51,7 +51,7 @@ const DEFAULT_GLOBAL_OPTIONS = {
 	maxSize: 100,
 	retries: 3,
 	backoff: 0,
-	backoffStrategy: 'exponential',
+	backoffStrategy: 'fixed',
 } as const
 
 export class Cache {

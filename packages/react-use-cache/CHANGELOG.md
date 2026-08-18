@@ -2,6 +2,14 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.1.2
+- README additions and changes
+- Type naming changes
+- Add Transition example to Vite example app
+
+## 0.1.1
+README additions and changes.
+
 ## 0.1.0
 
 Initial release.

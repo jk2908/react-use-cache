@@ -6,7 +6,7 @@
 		"moduleResolution": "NodeNext",
 		"strict": true,
 		"skipLibCheck": true,
-		"types": [],
+		"types": ["bun"],
 		"jsx": "react-jsx",
 		"jsxImportSource": "react",
 		"declaration": true,
@@ -18,5 +18,5 @@
 		"sourceMap": true,
 		"verbatimModuleSyntax": true
 	},
-	"include": ["src"]
+	"include": ["src", "test.ts"]
 }

@@ -1,4 +1,4 @@
-import { Suspense, use } from 'react'
+import { Suspense, use, useState, useTransition } from 'react'
 import { ErrorBoundary } from 'react-error-boundary'
 import {
 	Cached,
@@ -17,12 +17,7 @@ async function fetchUser(id: string, { signal }: ExecutionContext) {
 		throw new Error(`User ${id} failed (${res.status})`)
 	}
 
-	const user = await res.json()
-
-	return {
-		...user,
-		fetchedAt: Date.now(),
-	}
+	return res.json()
 }
 
 async function fetchSlowUser(id: string, { signal }: ExecutionContext) {
@@ -67,6 +62,8 @@ function Demo() {
 	const getBrokenUser = cached(fetchBrokenUser, {
 		key: 'broken-user',
 		retries: 3,
+		backoff: 1000,
+		backoffStrategy: 'exponential',
 	})
 
 	const getInlineUser = cached(async (id: string, { signal }: ExecutionContext) => {
@@ -78,12 +75,7 @@ function Demo() {
 			throw new Error(`User ${id} failed (${res.status})`)
 		}
 
-		const user = await res.json()
-
-		return {
-			...user,
-			fetchedAt: Date.now(),
-		}
+		return res.json()
 	}, 'inline-user')
 
 	return (
@@ -106,6 +98,10 @@ function Demo() {
 			<h2>Inline cached function</h2>
 
 			<UserRow id="3" getUser={getInlineUser} />
+
+			<h2>Transitioned user</h2>
+
+			<TransitionedUserRow id="1" getUser={getUser} />
 		</>
 	)
 }
@@ -151,6 +147,62 @@ function SlowUserRow({
 
 			<button onClick={() => getUser.abort(id)}>Abort</button>
 			<button onClick={() => getUser.invalidate(id)}>Invalidate</button>
+		</div>
+	)
+}
+
+function TransitionedUserRow({
+	id: _id,
+	getUser,
+}: {
+	id: string
+	getUser: Cached<typeof fetchUser>
+}) {
+	const [id, setId] = useState(_id)
+	const promise = getUser(id)
+	const version = useVersion(getUser.key(id))
+	const [isPending, startTransition] = useTransition()
+
+	return (
+		<div style={{ opacity: isPending ? 0.5 : 1 }}>
+			<ErrorBoundary
+				resetKeys={[version]}
+				fallbackRender={({ error, resetErrorBoundary }) => (
+					<>
+						<button
+							onClick={() => {
+								getUser.invalidate(id)
+								setId('1')
+								resetErrorBoundary()
+							}}>
+							Reset
+						</button>
+
+						<div>{getErrorMessage(error)}</div>
+					</>
+				)}>
+				<Suspense fallback={<div>Loading {id}</div>}>
+					<User promise={promise} />
+				</Suspense>
+			</ErrorBoundary>
+
+			<button
+				onClick={() =>
+					startTransition(() => {
+						setId(i => (parseInt(i) + 1).toString())
+					})
+				}>
+				Get next user
+			</button>
+
+			<button
+				onClick={() => {
+					startTransition(() => {
+						setId(i => (parseInt(i) - 1).toString())
+					})
+				}}>
+				Get previous user
+			</button>
 		</div>
 	)
 }

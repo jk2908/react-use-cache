@@ -25,7 +25,7 @@ import { createCacheKey } from './create-cache-key.js'
  * ```
  */
 export type Cached<T extends (...args: any[]) => Promise<any>> = {
-	(...args: CachedArgs<T>): Promise<Awaited<ReturnType<T>>>
+	(...args: ArgsWithoutExecutionContext<T>): Promise<Awaited<ReturnType<T>>>
 
 	/**
 	 * The prefix used when generating cache keys for this function.
@@ -35,14 +35,14 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	/**
 	 * Computes the cache key for the given arguments.
 	 */
-	key(...args: CachedArgs<T>): string
+	key(...args: ArgsWithoutExecutionContext<T>): string
 
 	/**
 	 * Invalidates the cached result for the given arguments.
 	 *
 	 * @see Cache.invalidate
 	 */
-	invalidate(...args: CachedArgs<T>): void
+	invalidate(...args: ArgsWithoutExecutionContext<T>): void
 
 	/**
 	 * Aborts an in-flight request for the given arguments.
@@ -50,7 +50,7 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	 * @returns `true` if a request was aborted; otherwise `false`.
 	 * @see Cache.abort
 	 */
-	abort(...args: CachedArgs<T>): boolean
+	abort(...args: ArgsWithoutExecutionContext<T>): boolean
 
 	/**
 	 * Returns the cache entry for the given arguments without promoting it to
@@ -58,11 +58,11 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	 *
 	 * @see Cache.peek
 	 */
-	peek(...args: CachedArgs<T>): Cache.Entry | undefined
+	peek(...args: ArgsWithoutExecutionContext<T>): Cache.Entry | undefined
 }
 
 // remove `Cache.ExecutionContext` from arg list if it exists
-type CachedArgs<T extends (...args: any[]) => any> =
+type ArgsWithoutExecutionContext<T extends (...args: any[]) => any> =
 	Parameters<T> extends [...infer Args, Cache.ExecutionContext?] ? Args : Parameters<T>
 
 export function createCached(cache: Cache) {
@@ -70,7 +70,7 @@ export function createCached(cache: Cache) {
 		fn: T,
 		a: string | (Cache.EntryOptions & { key: string }),
 	) => {
-		type TArgs = CachedArgs<T>
+		type TArgs = ArgsWithoutExecutionContext<T>
 		type TValue = Awaited<ReturnType<T>>
 
 		const { key: userKey, ...opts } = typeof a === 'string' ? { key: a } : a

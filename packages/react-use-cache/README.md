@@ -2,10 +2,6 @@
 
 A slight upgrade on a simple `Map` cache for `use(Promise)` in React 19.
 
-```bash
-bun add react-use-cache
-```
-
 ```tsx
 import { Suspense, use } from 'react'
 import { CacheProvider, useCache } from 'react-use-cache'
@@ -36,8 +32,7 @@ function User({ id }) {
 ```
 
 - Dedupe across sibling components
-- Retries with optional backoff (exponential or fixed); `AbortError` never eats
-  a retry slot
+- Retries with optional backoff (exponential or fixed)
 - Abort per entry
 - LRU eviction with a customisable `maxSize`
 - `useVersion(key)` - re-render a component when a key is invalidated
