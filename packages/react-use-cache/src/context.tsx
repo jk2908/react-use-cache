@@ -115,7 +115,7 @@ export function CacheProvider({
 	globalOpts?: Cache.GlobalOptions
 }) {
 	const [cache] = useState(() => new Cache(globalOpts))
-	const cached = createCached(cache)
+	const [cached] = useState(() => createCached(cache))
 
 	return <CacheContext value={{ cached, cache }}>{children}</CacheContext>
 }

@@ -2,6 +2,12 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.1.3
+- Fix: `CacheProvider` now creates its `cached` wrapper once for the lifetime
+  of the `Cache` instance instead of on every render. The identity of `cached`
+  is now stable, so `useMemo(() => cached(fn, opts), [cached])` in consumers
+  is no longer defeated by a fresh `cached` reference on each render.
+
 ## 0.1.2
 - README additions and changes
 - Type naming changes

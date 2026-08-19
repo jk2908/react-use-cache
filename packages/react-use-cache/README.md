@@ -95,8 +95,13 @@ The returned function has a few attached methods:
 > reference, wrap it:
 >
 > ```ts
-> const getUser = useMemo(() => cached(fetchUser, { key: 'user' }), [])
+> const getUser = useMemo(() => cached(fetchUser, { key: 'user' }), [cached])
 > ```
+>
+> The `cached` wrapper returned by `useCache()` has a stable identity — 
+> `CacheProvider` creates it once for the lifetime of the `Cache` instance — so
+> memoizing with `[cached]` as the dependency keeps the wrapped function stable
+> across re-renders.
 
 ### `useVersion(key)`
 
