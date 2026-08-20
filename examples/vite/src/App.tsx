@@ -6,7 +6,7 @@ import {
 	useCache,
 	useVersion,
 	type ExecutionContext,
-} from 'react-use-cache'
+} from '@jk2908/react-use-cache'
 
 async function fetchUser(id: string, { signal }: ExecutionContext) {
 	const res = await fetch(`https://dummyjson.com/users/${id}`, {

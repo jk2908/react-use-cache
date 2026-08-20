@@ -2,6 +2,12 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.1.5
+- Fix: the Vite example referenced the package by its unscoped name
+  (`react-use-cache`), so `bun install` failed with
+  `react-use-cache@workspace:* failed to resolve`. It now depends on and
+  imports the scoped `@jk2908/react-use-cache`.
+
 ## 0.1.4
 - Docs: document the `useVersion(key)` re-render vs remount distinction — the
   re-render happens whether or not the returned version is read, but using it
