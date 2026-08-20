@@ -100,7 +100,7 @@ The returned function has a few attached methods:
 >
 > The `cached` wrapper returned by `useCache()` has a stable identity — 
 > `CacheProvider` creates it once for the lifetime of the `Cache` instance — so
-> memoizing with `[cached]` as the dependency keeps the wrapped function stable
+> memoising with `[cached]` as the dependency keeps the wrapped function stable
 > across re-renders.
 
 ### `useVersion(key)`
@@ -111,6 +111,36 @@ const version = useVersion(getUser.key(id))
 
 Re-renders the component whenever `key` is invalidated. Pair it with
 `getUser.invalidate(...)` to refresh a mounted subtree after a mutation.
+
+The re-render happens whether or not you read the returned `version` — the
+subscription alone drives it. The value only matters for what you pass it into:
+
+- **Ignore it** → the component just re-renders. Existing instances keep their
+  local state:
+
+  ```tsx
+  function App({ id }) {
+    useVersion(getUser.key(id))
+    const user = use(getUser(id))
+    return <User user={user} /> // state preserved across refreshes
+  }
+  ```
+
+- **Use it as a `key`** → the keyed child remounts whenever the version
+  changes (i.e. every invalidation), resetting its state:
+
+  ```tsx
+  function App({ id }) {
+    const version = useVersion(getUser.key(id))
+    const user = use(getUser(id))
+    return <User key={version} user={user} /> // remounts on each refresh
+  }
+  ```
+
+Use the `key` form when a refresh represents a new resource and its subtree
+should start clean, e.g. a document editor remounting the editor when a freshly
+saved draft is loaded. Otherwise prefer ignoring the value so child components
+keep their state.
 
 ### `Cache`
 

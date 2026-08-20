@@ -2,6 +2,12 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.1.4
+- Docs: document the `useVersion(key)` re-render vs remount distinction — the
+  re-render happens whether or not the returned version is read, but using it
+  as a child `key` remounts the subtree (resetting state) instead of preserving
+  existing instances.
+
 ## 0.1.3
 - Fix: `CacheProvider` now creates its `cached` wrapper once for the lifetime
   of the `Cache` instance instead of on every render. The identity of `cached`
