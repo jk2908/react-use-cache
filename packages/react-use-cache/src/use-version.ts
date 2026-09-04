@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 
 import { useCache } from './use-cache.js'
 
@@ -13,9 +13,11 @@ import { useCache } from './use-cache.js'
 export function useVersion(key: string) {
 	const { cache } = useCache()
 
-	return useSyncExternalStore(
-		cb => cache.subscribe(key, cb),
-		() => cache.version(key),
-		() => cache.version(key),
+	const subscribe = useCallback(
+		(cb: () => void) => cache.subscribe(key, cb),
+		[cache, key],
 	)
+	const getSnapshot = useCallback(() => cache.version(key), [cache, key])
+
+	return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 }

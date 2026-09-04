@@ -2,6 +2,15 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.1.6
+- Fix: `useVersion` now memoizes its `subscribe`/`getSnapshot` closures, so
+  invalidations reliably bump the version and subscribers re-render. Passing
+  fresh closures to `useSyncExternalStore` on every render caused React to
+  tear down and re-create the subscription each render — and because
+  `Cache.subscribe`'s cleanup deletes the version slot when the listener count
+  reaches zero, the slot was recreated at version `0`, discarding
+  `invalidate()` bumps before they could reach a commit.
+
 ## 0.1.5
 - Fix: the Vite example referenced the package by its unscoped name
   (`react-use-cache`), so `bun install` failed with
