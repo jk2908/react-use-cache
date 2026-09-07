@@ -53,6 +53,14 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	abort(...args: ArgsWithoutExecutionContext<T>): boolean
 
 	/**
+	 * Invalidates the cached result for the given arguments, aborting any
+	 * in-flight request so a subsequent read starts clean.
+	 *
+	 * @see Cache.invalidate
+	 */
+	refresh(...args: ArgsWithoutExecutionContext<T>): void
+
+	/**
 	 * Returns the cache entry for the given arguments without promoting it to
 	 * the most recently used position.
 	 *
@@ -91,6 +99,9 @@ export function createCached(cache: Cache) {
 				},
 				abort(...args: TArgs) {
 					return cache.abort(key(...args))
+				},
+				refresh(...args: TArgs) {
+					cache.invalidate(key(...args), { abort: true })
 				},
 				peek(...args: TArgs) {
 					return cache.peek(key(...args))

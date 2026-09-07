@@ -70,7 +70,7 @@ describe('Rendering', () => {
 		state = () => ({ id: '1', name: 'Grace' })
 
 		await act(async () => {
-			ref.cache!.invalidate('user:1')
+			ref.cache!.invalidate('user:["1"]')
 		})
 
 		expect(screen.getByText('Grace')).toBeInTheDocument()
@@ -120,6 +120,33 @@ describe('Rendering', () => {
 
 		expect(screen.getByText('Ada')).toBeInTheDocument()
 	})
+
+	test('cached exposes refresh', async () => {
+		const ref: { cache?: Cache; get?: CapturedCached } = {}
+
+		await act(async () => {
+			render(
+				<CacheProvider>
+					<Suspense fallback={<div>Loading...</div>}>
+						<CapturingReader id="1" ref={ref} />
+					</Suspense>
+				</CacheProvider>,
+			)
+		})
+		expect(screen.getByText('Ada')).toBeInTheDocument()
+
+		const key = ref.get!.key('1')
+		expect(ref.cache!.has(key)).toBe(true)
+
+		// refresh drops the entry for a clean re-read
+		ref.get!.refresh('1')
+		expect(ref.cache!.has(key)).toBe(false)
+
+		// re-populate through the wrapper
+		void ref.get!('1')
+		await act(async () => {})
+		expect(ref.cache!.has(key)).toBe(true)
+	})
 })
 
 function Reader({
@@ -141,7 +168,7 @@ function Reader({
 }
 
 function VersionedReader({ id, retries }: { id: string; retries?: number }) {
-	useVersion('user:1')
+	useVersion('user:["1"]')
 	const { cached } = useCache()
 	const get = cached(getUser, { key: 'user', retries })
 	const user = use(get(id))
@@ -152,6 +179,29 @@ function VersionedReader({ id, retries }: { id: string; retries?: number }) {
 function Probe({ ref }: { ref: { cache?: Cache } }) {
 	ref.cache = useCache().cache
 	return null
+}
+
+type CapturedCached = {
+	(id: string): Promise<{ name: string }>
+	key: (id: string) => string
+	refresh: (id: string) => void
+}
+
+function CapturingReader({
+	id,
+	ref,
+}: {
+	id: string
+	ref: { cache?: Cache; get?: CapturedCached }
+}) {
+	const { cache, cached } = useCache()
+	const get = cached(getUser, 'user') as CapturedCached
+	const { name } = use(get(id))
+
+	ref.cache = cache
+	ref.get = get
+
+	return <div>{name}</div>
 }
 
 function Throwing() {

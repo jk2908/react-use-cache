@@ -33,9 +33,12 @@ function User({ id }) {
 
 - Dedupe across sibling components
 - Retries with optional backoff (exponential or fixed)
-- Abort per entry
-- LRU eviction with a customisable `maxSize`
+- Abort per entry, with shared-request protection (`allowSharedAbort`)
+- LRU eviction with a customisable `maxSize` (min `1`)
 - `useVersion(key)` - re-render a component when a key is invalidated
+- `refresh` - invalidate and cancel in-flight in one call
+- Errors stay pinned (Suspense-safe) unless you opt into `cacheErrors: false`
+- Unambiguous cache keys — `1`, `'1'`, and `1n` never collide
 
 ## API
 
@@ -67,6 +70,7 @@ const getUser = cached(fetchUser, {
   retries: 3, // optional per-function override of the global budget
   backoff: 100, // optional ms delay between retries; default 0 (no delay)
   backoffStrategy: 'exponential', // 'exponential' (default) | 'fixed'
+  allowSharedAbort: false, // optional: refuse to abort while other consumers subscribe
 })
 ```
 
@@ -80,14 +84,20 @@ type GetUser = Cached<typeof fetchUser> // (id: string) => Promise<User>
 
 `Cached` strips `ExecutionContext` off the end of the param list - the cache passes it in for you, so the public signature just has the user-facing args. The returned function resolves to whatever your function returns.
 
+Cache keys are built by serialising the arguments, so structurally equal args always
+dedupe to the same entry and distinct args never collide — `1`, `'1'`, and `1n`
+produce different keys; `getUser.key(id)` gives you the exact string, which is also
+what `useVersion` and the raw `Cache` methods expect.
+
 The returned function has a few attached methods:
 
-| method                        | description                                       |
-| ----------------------------- | ------------------------------------------------- |
-| `getUser.key(...args)`        | the full cache key for these args                 |
-| `getUser.invalidate(...args)` | drop the entry & notify `useVersion` subscribers  |
-| `getUser.abort(...args)`      | abort an in-flight entry; returns `boolean`       |
-| `getUser.peek(...args)`       | read the entry without promoting it (no LRU bump) |
+| method                          | description                                                    |
+| ------------------------------- | -------------------------------------------------------------- |
+| `getUser.key(...args)`          | the full cache key for these args                              |
+| `getUser.invalidate(...args)`   | drop the entry & notify `useVersion` subscribers               |
+| `getUser.refresh(...args)`      | invalidate & abort any in-flight request in one call           |
+| `getUser.abort(...args)`        | abort an in-flight entry; returns `boolean`                    |
+| `getUser.peek(...args)`         | read the entry without promoting it (no LRU bump)              |
 
 > **Note:** `cached(fn, opts)` returns a fresh function on every call, so don't
 > rely on a stable identity. Calling it inside render (as above) is fine since
@@ -146,28 +156,31 @@ keep their state.
 
 The class is also exported directly, for tests or non-React code. See
 `isCacheExecutionContext` for checking the abort context inside a fetcher.
+Beyond the wrapper methods it offers `invalidate(key | predicate, { abort })`
+for refresh-style drops, plus `subscribe`/`version` for manual version
+tracking.
 
 ## Patterns
 
 ### Refresh after mutation
 
-Once `use(getUser(id))` has resolved, it won't re-read on its own. `invalidate`
-drops the cache entry and bumps the version so to make the same component
-re-fetch, subscribe to the version. The bump triggers a re-render; since the
-entry was deleted, `getUser(id)` returns a fresh pending promise that
-re-suspends:
+Once `use(getUser(id))` has resolved, it won't re-read on its own. `refresh`
+(alias: `invalidate`) drops the cache entry, cancels any in-flight request, and
+bumps the version. The bump triggers a re-render; since the entry was deleted,
+`getUser(id)` returns a fresh pending promise that re-suspends:
 
 ```tsx
 function User({ id }) {
-  useVersion(`user:${id}`)
   const { cached } = useCache()
   const getUser = cached(fetchUser, { key: 'user' })
+  useVersion(getUser.key(id))
+
   const user = use(getUser(id))
 
   return (
     <>
       <p>{user.name}</p>
-      <button onClick={() => getUser.invalidate(id)}>Refresh</button>
+      <button onClick={() => getUser.refresh(id)}>Refresh</button>
     </>
   )
 }
@@ -175,16 +188,18 @@ function User({ id }) {
 
 Alternatively, lift the promise into the parent and pass it as a prop. The
 parent subscribes to the version and creates the promise; the child just
-renders it. On invalidate, the bump triggers a re-render, `getUser(id)` returns
+renders it. On refresh, the bump triggers a re-render, `getUser(id)` returns
 a fresh promise (the entry was deleted), and the child's `use(promise)`
 re-suspends:
 
 ```tsx
 function App({ id }) {
-  const version = useVersion(`user:${id}`)
   const { cached } = useCache()
   const getUser = cached(fetchUser, { key: 'user' })
-  return <User key={version} promise={getUser(id)} />
+  const version = useVersion(getUser.key(id))
+  const promise = getUser(id)
+
+  return <User key={version} promise={promise} />
 }
 
 function User({ promise }: { promise: Promise<User> }) {
@@ -194,6 +209,10 @@ function User({ promise }: { promise: Promise<User> }) {
 ```
 
 ### Abort on unmount
+
+The classic unmount pattern — cancel the request when the component goes away —
+is one line, because `abort()` on an in-flight entry also removes it from the
+cache:
 
 ```tsx
 function User({ id }) {
@@ -206,6 +225,22 @@ function User({ id }) {
   return <p>{user.name}</p>
 }
 ```
+
+One caveat: the promise for a key is shared across every component using it, so
+aborting in cleanup cancels a sibling's request too. By default `abort()` still
+runs in that situation, but emits a **development-only warning** when the key
+has more than one subscriber (consumers tracked via `useVersion` or
+`cache.subscribe`). To make `abort()` *refuse* — return `false` and keep the
+request alive — declare the cached function with `allowSharedAbort: false`:
+
+```tsx
+const getUser = cached(fetchUser, { key: 'user', allowSharedAbort: false })
+
+useEffect(() => () => getUser.abort(id), [id]) // no-op (warned) while a sibling subscribes
+```
+
+Note that only *subscribed* consumers are counted — a sibling rendering a bare
+`use(promise)` without subscribing is invisible to this guard.
 
 ### Retries with backoff
 
@@ -223,6 +258,37 @@ The cache retries the underlying function up to `retries` times, waiting
 after each failure (`100 → 200 → 400 …`); `'fixed'` holds it steady at
 `backoff`. Pass `backoff: 0` (the default) to retry back-to-back with no wait.
 
+### Errors
+
+A rejected promise stays cached until you `invalidate`/`refresh` it. This is
+required for Suspense: when a render suspends on a rejected promise, React
+re-throws that rejection into an `ErrorBoundary`, which only settles if the
+*same* promise is returned on the retried render. Evicting failures on settle
+would make every re-render produce a fresh promise that re-suspends forever.
+
+For imperative reads — event handlers, service layers, non-render code — you
+can opt into retry-on-next-read instead:
+
+```ts
+const getUser = cached(fetchUser, {
+  key: 'user',
+  cacheErrors: false, // drop failures as soon as they settle
+})
+```
+
+The entry is removed the moment the request fails, so the next `getUser(id)`
+re-runs the function. Don't combine `cacheErrors: false` with `use(promise)` in
+a component — see above.
+
+### Eviction
+
+The cache keeps at most `maxSize` entries (default 100, minimum 1), evicting
+the least-recently-used entry when full. An evicted in-flight request is aborted
+**unless** a `useVersion` subscriber is still watching it — in that case the
+entry is dropped but the request is left to finish so the observer isn't
+cancelled out from under them. Eviction never resets `useVersion` counters, so a
+component re-adding an evicted entry keeps its version history.
+
 ### Prefix invalidation
 
 ```ts
@@ -232,7 +298,8 @@ cache.invalidate(key => key.startsWith('user:'))
 
 `invalidate` accepts a predicate, so prefix-style invalidation needs no extra
 API. Every matching key is dropped and its version bumped, notifying any
-`useVersion` subscribers.
+`useVersion` subscribers. The underlying aborting variant,
+`cache.invalidate(predicate, { abort: true })` is also available.
 
 ## License
 

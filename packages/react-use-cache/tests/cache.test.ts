@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from 'vitest'
 import { Cache } from '../src/cache.js'
 
 describe('Cache', () => {
-	test('reuses rejected promises until they are invalidated', async () => {
+	test('pins rejected promises by default until they are invalidated', async () => {
 		const cache = new Cache()
 
 		let fail = true
@@ -36,6 +36,28 @@ describe('Cache', () => {
 		cache.invalidate('user:4')
 
 		await expect(readUser()).resolves.toEqual({ id: '4' })
+		expect(calls).toBe(2)
+	})
+
+	test('with cacheErrors: false, drops rejected promises so a later read retries', async () => {
+		const cache = new Cache()
+		let calls = 0
+
+		const readUser = () =>
+			cache.read(
+				'user:4',
+				async () => {
+					calls++
+					throw new Error('User not found')
+				},
+				{ retries: 0, cacheErrors: false },
+			)
+
+		await expect(readUser()).rejects.toThrow('User not found')
+		expect(cache.has('user:4')).toBe(false)
+
+		// a later read re-runs the function instead of reusing the rejection
+		await expect(readUser()).rejects.toThrow('User not found')
 		expect(calls).toBe(2)
 	})
 
@@ -78,6 +100,56 @@ describe('Cache', () => {
 		expect(cache.size).toBe(2)
 	})
 
+	test('eviction does not abort entries with a live subscriber', async () => {
+		const cache = new Cache({ maxSize: 1 })
+
+		let resolve!: (value: string) => void
+
+		const read = cache.read('slow', ({ signal }) => {
+			return new Promise((res, reject) => {
+				resolve = res
+				signal.addEventListener('abort', () => {
+					reject(new DOMException('Aborted', 'AbortError'))
+				})
+			})
+		})
+
+		const unsub = cache.subscribe('slow', () => {})
+
+		// pushing a second entry evicts 'slow', but it's still being watched
+		cache.read('fast', () => Promise.resolve('fast'))
+
+		expect(cache.has('slow')).toBe(false)
+		resolve('done')
+		await expect(read).resolves.toBe('done')
+		unsub()
+	})
+
+	test('version persists across eviction', () => {
+		const cache = new Cache({ maxSize: 1 })
+		const seen: number[] = []
+
+		const unsub = cache.subscribe('user:1', () => seen.push(cache.version('user:1')))
+
+		cache.read('user:1', () => Promise.resolve('a'))
+		cache.invalidate('user:1')
+		expect(cache.version('user:1')).toBe(1)
+
+		// eviction drops the entry but not the version slot
+		for (let i = 0; i < 5; i++) {
+			cache.read(`other:${i}`, () => Promise.resolve(i))
+		}
+
+		expect(cache.has('user:1')).toBe(false)
+		expect(cache.version('user:1')).toBe(1)
+
+		cache.invalidate('user:1')
+		expect(cache.version('user:1')).toBe(2)
+		expect(seen).toEqual([1, 2])
+
+		unsub()
+	})
+
 	test('retries up to the budget then succeeds', async () => {
 		const cache = new Cache({ retries: 3 })
 		let attempts = 0
@@ -109,6 +181,118 @@ describe('Cache', () => {
 		await expect(read).rejects.toThrow('Aborted')
 		// aborted entry is removed once settled; a fresh read starts clean
 		expect(cache.has('slow')).toBe(false)
+	})
+
+	test('throws when maxSize is below 1', () => {
+		expect(() => new Cache({ maxSize: 0 })).toThrow(RangeError)
+	})
+
+	test('abort on a settled entry removes it synchronously', async () => {
+		const cache = new Cache()
+
+		cache.read('user:1', async () => 'a')
+		await cache.peek('user:1')?.p
+
+		expect(cache.abort('user:1')).toBe(true)
+		expect(cache.has('user:1')).toBe(false)
+	})
+
+	test('abort warns but proceeds on a shared key by default', async () => {
+		const cache = new Cache()
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+		try {
+			const read = cache.read('user:1', ({ signal }) => {
+				return new Promise((_resolve, reject) => {
+					signal.addEventListener('abort', () => {
+						reject(new DOMException('Aborted', 'AbortError'))
+					})
+				})
+			})
+
+			const unsubA = cache.subscribe('user:1', () => {})
+			const unsubB = cache.subscribe('user:1', () => {})
+
+			expect(cache.abort('user:1')).toBe(true)
+			expect(warn).toHaveBeenCalled()
+
+			// shared but allowed — the request is still cancelled
+			await expect(read).rejects.toThrow('Aborted')
+			expect(cache.has('user:1')).toBe(false)
+
+			unsubA()
+			unsubB()
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	test('abort refuses a shared key when allowSharedAbort is false', () => {
+		const cache = new Cache()
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+		let aborted = false
+
+		try {
+			cache.read(
+				'user:1',
+				({ signal }) =>
+					new Promise(() => {
+						signal.addEventListener('abort', () => {
+							aborted = true
+						})
+					}),
+				{ allowSharedAbort: false },
+			)
+
+			const unsubA = cache.subscribe('user:1', () => {})
+			const unsubB = cache.subscribe('user:1', () => {})
+
+			expect(cache.abort('user:1')).toBe(false)
+			expect(cache.has('user:1')).toBe(true)
+			expect(aborted).toBe(false)
+			expect(warn).toHaveBeenCalled()
+
+			unsubA()
+			unsubB()
+		} finally {
+			warn.mockRestore()
+		}
+	})
+
+	test('abort proceeds on an unshared key even with allowSharedAbort: false', async () => {
+		const cache = new Cache()
+
+		const read = cache.read(
+			'user:1',
+			({ signal }) =>
+				new Promise((_resolve, reject) => {
+					signal.addEventListener('abort', () => {
+						reject(new DOMException('Aborted', 'AbortError'))
+					})
+				}),
+			{ allowSharedAbort: false },
+		)
+
+		expect(cache.abort('user:1')).toBe(true)
+		await expect(read).rejects.toThrow('Aborted')
+	})
+
+	test('invalidate with abort cancels the in-flight request and drops immediately', async () => {
+		const cache = new Cache()
+
+		const read = cache.read('user:1', ({ signal }) => {
+			return new Promise((_resolve, reject) => {
+				signal.addEventListener('abort', () => {
+					reject(new DOMException('Aborted', 'AbortError'))
+				})
+			})
+		})
+
+		cache.invalidate('user:1', { abort: true })
+
+		// entry is gone right away so a read-after-refresh starts clean
+		expect(cache.has('user:1')).toBe(false)
+		await expect(read).rejects.toThrow('Aborted')
 	})
 
 	test('subscribe + version track invalidations', async () => {

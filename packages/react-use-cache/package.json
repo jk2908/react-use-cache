@@ -1,6 +1,6 @@
 {
 	"name": "@jk2908/react-use-cache",
-	"version": "0.1.6",
+	"version": "0.2.0",
 	"author": "Jerome Kenway",
 	"description": "A slight upgrade on a simple `Map` cache for `use(Promise)` in React 19",
 	"license": "MIT",
