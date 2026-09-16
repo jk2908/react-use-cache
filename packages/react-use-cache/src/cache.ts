@@ -172,6 +172,43 @@ export class Cache {
 	}
 
 	/**
+	 * Store a promise under the given key, replacing any existing entry. Use this
+	 * to seed or prewarm the cache with a value you already have, rather than
+	 * going through `read`'s compute-on-miss path.
+	 *
+	 * The promise can't be cancelled through its own entry controller unless it
+	 * listens to the injected signal, so `abort()` on a stored entry just drops
+	 * it once the promise settles.
+	 *
+	 * @param key - The key to store the promise under.
+	 * @param promise - The promise to cache.
+	 * @param opts - Optional entry options.
+	 * @returns The stored promise.
+	 */
+	store<T>(key: string, promise: Promise<T>, opts: Cache.EntryOptions = {}) {
+		const controller = new AbortController()
+		const entry = this.#set(key, promise, controller, opts)
+		this.#observe(key, entry, promise)
+
+		return promise
+	}
+
+	/**
+	 * Watch a promise and mark its entry as done once it settles (resolve or
+	 * reject), so `abort()` can remove a finished entry instantly. The
+	 * `cache.get(key) === entry` guard handles the race where a newer request
+	 * replaces the entry while this promise is still pending — only the exact
+	 * entry we stored gets marked.
+	 */
+	#observe(key: string, entry: Cache.Entry, promise: Promise<unknown>) {
+		promise
+			.finally(() => {
+				if (this.cache.get(key) === entry) entry.settled = true
+			})
+			.catch(() => {}) // swallow the mirrored rejection of the child promise
+	}
+
+	/**
 	 * Set a cached promise for the given key. If the cache is full, the least recently
 	 * used entry will be evicted.
 	 *
@@ -307,12 +344,7 @@ export class Cache {
 		})()
 
 		const entry = this.#set<T>(key, p, controller, opts)
-
-		// once the promise settles, mark the entry as done so `abort()` can remove
-		// a finished entry instantly
-		p.finally(() => {
-			if (this.cache.get(key) === entry) entry.settled = true
-		}).catch(() => {}) // swallow the mirrored rejection of the child promise
+		this.#observe(key, entry, p)
 
 		// errors are kept in the cache by default (required for `React.use()` compat).
 		// With `cacheErrors: false` the entry sweeps itself out on failure so the next

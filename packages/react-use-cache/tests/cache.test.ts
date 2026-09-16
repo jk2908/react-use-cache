@@ -67,8 +67,8 @@ describe('Cache', () => {
 		const a = Promise.resolve('a')
 		const b = Promise.resolve('b')
 
-		cache.read('user:1', () => a)
-		cache.read('post:1', () => b)
+		cache.store('user:1', a)
+		cache.store('post:1', b)
 
 		expect(cache.has('user:1')).toBe(true)
 		await expect(cache.peek('user:1')?.p).resolves.toBe('a')
@@ -87,12 +87,12 @@ describe('Cache', () => {
 	test('evicts the least-recently-used entry past maxSize', () => {
 		const cache = new Cache({ maxSize: 2 })
 
-		cache.read('a', () => Promise.resolve(1))
-		cache.read('b', () => Promise.resolve(2))
+		cache.store('a', Promise.resolve(1))
+		cache.store('b', Promise.resolve(2))
 
 		// re-read 'a' so it becomes most-recently-used, leaving 'b' as LRU
 		cache.read('a', () => Promise.resolve(1))
-		cache.read('c', () => Promise.resolve(3)) // evicts 'b'
+		cache.store('c', Promise.resolve(3)) // evicts 'b'
 
 		expect(cache.has('a')).toBe(true)
 		expect(cache.has('b')).toBe(false)
@@ -117,7 +117,7 @@ describe('Cache', () => {
 		const unsub = cache.subscribe('slow', () => {})
 
 		// pushing a second entry evicts 'slow', but it's still being watched
-		cache.read('fast', () => Promise.resolve('fast'))
+		cache.store('fast', Promise.resolve('fast'))
 
 		expect(cache.has('slow')).toBe(false)
 		resolve('done')
@@ -131,13 +131,13 @@ describe('Cache', () => {
 
 		const unsub = cache.subscribe('user:1', () => seen.push(cache.version('user:1')))
 
-		cache.read('user:1', () => Promise.resolve('a'))
+		cache.store('user:1', Promise.resolve('a'))
 		cache.invalidate('user:1')
 		expect(cache.version('user:1')).toBe(1)
 
 		// eviction drops the entry but not the version slot
 		for (let i = 0; i < 5; i++) {
-			cache.read(`other:${i}`, () => Promise.resolve(i))
+			cache.store(`other:${i}`, Promise.resolve(i))
 		}
 
 		expect(cache.has('user:1')).toBe(false)
@@ -190,7 +190,7 @@ describe('Cache', () => {
 	test('abort on a settled entry removes it synchronously', async () => {
 		const cache = new Cache()
 
-		cache.read('user:1', async () => 'a')
+		cache.store('user:1', Promise.resolve('a'))
 		await cache.peek('user:1')?.p
 
 		expect(cache.abort('user:1')).toBe(true)
@@ -304,7 +304,7 @@ describe('Cache', () => {
 		expect(cache.version('user:1')).toBe(0)
 		expect(seen).toHaveLength(0)
 
-		cache.read('user:1', () => Promise.resolve('a'))
+		cache.store('user:1', Promise.resolve('a'))
 		cache.invalidate('user:1')
 
 		await new Promise(r => setTimeout(r, 0))
@@ -320,7 +320,7 @@ describe('Cache', () => {
 	test('version is 0 for keys with no subscriber', () => {
 		const cache = new Cache()
 
-		cache.read('user:1', () => Promise.resolve('a'))
+		cache.store('user:1', Promise.resolve('a'))
 		// invalidating an unwatched key is a no-op on the version counter
 		cache.invalidate('user:1')
 		expect(cache.version('user:1')).toBe(0)
@@ -333,8 +333,8 @@ describe('Cache', () => {
 		cache.subscribe('user:1', () => seen.push('user:1'))
 		cache.subscribe('post:1', () => seen.push('post:1'))
 
-		cache.read('user:1', () => Promise.resolve('a'))
-		cache.read('post:1', () => Promise.resolve('b'))
+		cache.store('user:1', Promise.resolve('a'))
+		cache.store('post:1', Promise.resolve('b'))
 
 		expect(cache.clear()).toBe(2)
 		expect(seen.toSorted()).toEqual(['post:1', 'user:1'])
@@ -354,14 +354,14 @@ describe('Cache', () => {
 	test('peek does not promote the entry to most-recently-used', () => {
 		const cache = new Cache({ maxSize: 2 })
 
-		cache.read('a', () => Promise.resolve(1))
-		cache.read('b', () => Promise.resolve(2))
+		cache.store('a', Promise.resolve(1))
+		cache.store('b', Promise.resolve(2))
 
 		// peek 'a' repeatedly — it should remain the LRU candidate
 		expect(cache.peek('a')).toBeDefined()
 		expect(cache.peek('a')).toBeDefined()
 
-		cache.read('c', () => Promise.resolve(3)) // evicts LRU = 'a'
+		cache.store('c', Promise.resolve(3)) // evicts LRU = 'a'
 
 		expect(cache.has('a')).toBe(false)
 		expect(cache.has('b')).toBe(true)
@@ -399,7 +399,7 @@ describe('Cache', () => {
 		})
 
 		// pushing a second entry evicts the LRU one, aborting it
-		cache.read('fast', () => Promise.resolve('fast'))
+		cache.store('fast', Promise.resolve('fast'))
 
 		await expect(read).rejects.toThrow('Aborted')
 	})
@@ -477,9 +477,9 @@ describe('Cache', () => {
 		cache.subscribe('user:2', () => seen.push('user:2'))
 		cache.subscribe('post:1', () => seen.push('post:1'))
 
-		cache.read('user:1', () => Promise.resolve('a'))
-		cache.read('user:2', () => Promise.resolve('b'))
-		cache.read('post:1', () => Promise.resolve('c'))
+		cache.store('user:1', Promise.resolve('a'))
+		cache.store('user:2', Promise.resolve('b'))
+		cache.store('post:1', Promise.resolve('c'))
 
 		// predicate is the canonical way to invalidate keys sharing a prefix
 		cache.invalidate(key => key.startsWith('user:'))

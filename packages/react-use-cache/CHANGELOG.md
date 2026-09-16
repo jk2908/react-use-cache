@@ -2,6 +2,17 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.3.0
+
+### Added
+
+- `Cache.store(key, promise, opts?)` — explicitly cache a promise you already
+  have, for seeding or prewarming, without going through `read`'s
+  compute-on-miss path. It creates its own entry controller and tracks
+  settlement, so `abort()` behaves identically to `read`-created entries. The
+  raw storage primitive was renamed `#set` and kept private; `store` is the
+  public write path.
+
 ## 0.2.0
 
 ### Added
