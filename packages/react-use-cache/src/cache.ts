@@ -122,12 +122,6 @@ function devWarn(message: string) {
 	console.warn(message)
 }
 
-function assertMaxAge(value: number) {
-	if (!(value >= 0)) {
-		throw new RangeError('Cache maxAge must be zero or greater')
-	}
-}
-
 export class Cache {
 	/**
 	 * The internal cache, mapping keys to cached entries
@@ -152,7 +146,9 @@ export class Cache {
 			throw new RangeError('Cache maxSize must be at least 1')
 		}
 
-		assertMaxAge(this.opts.maxAge)
+		if (!(this.opts.maxAge >= 0)) {
+			throw new RangeError('Cache maxAge must be zero or greater')
+		}
 	}
 
 	get size() {
@@ -300,7 +296,9 @@ export class Cache {
 
 		const maxAge = opts.maxAge ?? this.opts.maxAge
 
-		assertMaxAge(maxAge)
+		if (!(maxAge >= 0)) {
+			throw new RangeError('Cache maxAge must be zero or greater')
+		}
 
 		const entry: Cache.Entry = {
 			p: promise,
@@ -334,7 +332,9 @@ export class Cache {
 		fn: (ctx: Cache.ExecutionContext) => Promise<T>,
 		opts: Cache.EntryOptions = {},
 	) {
-		assertMaxAge(opts.maxAge ?? this.opts.maxAge)
+		if (!((opts.maxAge ?? this.opts.maxAge) >= 0)) {
+			throw new RangeError('Cache maxAge must be zero or greater')
+		}
 
 		const existing = this.#get(key)
 		if (existing) return existing.p as Promise<T>
