@@ -120,12 +120,12 @@ export const CacheContext = createContext<{
 
 export function CacheProvider({
 	children,
-	globalOpts,
+	defaults,
 }: {
 	children: React.ReactNode
-	globalOpts?: Cache.GlobalOptions
+	defaults?: Cache.GlobalOptions
 }) {
-	const [cache] = useState(() => new Cache(globalOpts))
+	const [cache] = useState(() => new Cache(defaults))
 	const [cached] = useState(() => createCached(cache))
 
 	return <CacheContext value={{ cached, cache }}>{children}</CacheContext>

@@ -12,6 +12,13 @@ All notable changes to `react-use-cache` are documented here.
   settlement, so `abort()` behaves identically to `read`-created entries. The
   raw storage primitive was renamed `#set` and kept private; `store` is the
   public write path.
+- `maxAge` expiry for settled entries, in milliseconds. Supported globally,
+  per `cached` call, and on `read`/`store`. Expiry is lazy and starts after the
+  promise settles; in-flight entries do not expire.
+
+### Changed
+
+- `CacheProvider`'s `globalOpts` prop is now `defaults`.
 
 ## 0.2.0
 

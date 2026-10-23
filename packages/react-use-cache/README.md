@@ -38,6 +38,7 @@ function User({ id }) {
 - `useVersion(key)` - re-render a component when a key is invalidated
 - `refresh` - invalidate and cancel in-flight in one call
 - Errors stay pinned (Suspense-safe) unless you opt into `cacheErrors: false`
+- Optional `maxAge` expiry for settled entries
 - Unambiguous cache keys — `1`, `'1'`, and `1n` never collide
 
 ## API
@@ -45,7 +46,7 @@ function User({ id }) {
 ### `CacheProvider`
 
 ```tsx
-<CacheProvider globalOpts={{ maxSize: 100, retries: 3 }}>
+<CacheProvider defaults={{ maxSize: 100, retries: 3, maxAge: 60_000 }}>
   {children}
 </CacheProvider>
 ```
@@ -67,6 +68,7 @@ Wraps an async function in a cache-aware version.
 ```ts
 const getUser = cached(fetchUser, {
   key: 'user', // prefix for cache keys
+  maxAge: 60_000, // optional ms before a settled entry expires
   retries: 3, // optional per-function override of the global budget
   backoff: 100, // optional ms delay between retries; default 0 (no delay)
   backoffStrategy: 'exponential', // 'exponential' (default) | 'fixed'
@@ -112,6 +114,18 @@ The returned function has a few attached methods:
 > `CacheProvider` creates it once for the lifetime of the `Cache` instance — so
 > memoising with `[cached]` as the dependency keeps the wrapped function stable
 > across re-renders.
+
+### Expiry
+
+`maxAge` is measured in milliseconds and starts when the promise settles, not when it is read. In-flight entries never expire, so a slow request is not cancelled just because its TTL elapsed.
+
+```ts
+const getUser = cached(fetchUser, { key: 'user', maxAge: 60_000 })
+```
+
+Expiry is lazy: the entry is removed when `read`, `peek`, `has`, or `size` next observes that it has expired. There is no timer and no automatic rerender. A mounted component keeps its current value until it renders again or the entry is invalidated.
+
+`maxAge: 0` expires immediately after settlement. The default is `Infinity`, which preserves the existing unbounded behaviour.
 
 ### `useVersion(key)`
 

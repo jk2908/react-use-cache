@@ -492,3 +492,127 @@ describe('Cache', () => {
 		expect(seen.toSorted()).toEqual(['user:1', 'user:2'])
 	})
 })
+
+describe('maxAge', () => {
+	test('expires settled entries after the global maxAge', async () => {
+		vi.useFakeTimers()
+
+		try {
+			const cache = new Cache({ maxAge: 1000 })
+			let calls = 0
+
+			const read = () => cache.read('value', async () => ++calls)
+
+			await expect(read()).resolves.toBe(1)
+			await Promise.resolve()
+
+			vi.advanceTimersByTime(999)
+			expect(cache.has('value')).toBe(true)
+
+			vi.advanceTimersByTime(1)
+			expect(cache.has('value')).toBe(false)
+
+			await expect(read()).resolves.toBe(2)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test('supports a per-entry maxAge override', async () => {
+		vi.useFakeTimers()
+
+		try {
+			const cache = new Cache({ maxAge: 1000 })
+			let calls = 0
+
+			const read = () => cache.read('value', async () => ++calls, { maxAge: 2000 })
+
+			await expect(read()).resolves.toBe(1)
+			await Promise.resolve()
+
+			vi.advanceTimersByTime(1999)
+			expect(cache.has('value')).toBe(true)
+
+			vi.advanceTimersByTime(1)
+			expect(cache.has('value')).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test('does not expire an entry while its promise is pending', async () => {
+		vi.useFakeTimers()
+
+		try {
+			const cache = new Cache({ maxAge: 1000 })
+			let resolve!: (value: string) => void
+
+			const first = cache.read(
+				'value',
+				() =>
+					new Promise<string>(res => {
+						resolve = res
+					}),
+			)
+
+			vi.advanceTimersByTime(2000)
+
+			expect(cache.read('value', () => Promise.resolve('other'))).toBe(first)
+
+			resolve('done')
+			await expect(first).resolves.toBe('done')
+			await Promise.resolve()
+
+			vi.advanceTimersByTime(1000)
+			expect(cache.has('value')).toBe(false)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test('supports zero and infinite maxAge values', async () => {
+		vi.useFakeTimers()
+
+		try {
+			const immediate = new Cache({ maxAge: 0 })
+			const forever = new Cache({ maxAge: Infinity })
+
+			await immediate.store('now', Promise.resolve('now')).then(() => {})
+			await forever.store('later', Promise.resolve('later')).then(() => {})
+			await Promise.resolve()
+
+			vi.advanceTimersByTime(1000)
+
+			expect(immediate.has('now')).toBe(false)
+			expect(forever.has('later')).toBe(true)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test('prunes expired entries from size', async () => {
+		vi.useFakeTimers()
+
+		try {
+			const cache = new Cache({ maxAge: 1000 })
+
+			await cache.store('value', Promise.resolve('value')).then(() => {})
+			await Promise.resolve()
+
+			vi.advanceTimersByTime(1000)
+			expect(cache.size).toBe(0)
+		} finally {
+			vi.useRealTimers()
+		}
+	})
+
+	test('throws for invalid maxAge values', () => {
+		expect(() => new Cache({ maxAge: -1 })).toThrow(RangeError)
+		expect(() => new Cache({ maxAge: Number.NaN })).toThrow(RangeError)
+
+		const cache = new Cache()
+		expect(() => cache.read('value', () => Promise.resolve(1), { maxAge: -1 })).toThrow(
+			RangeError,
+		)
+	})
+})

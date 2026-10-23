@@ -12,6 +12,11 @@ export namespace Cache {
 		 * The maximum number of entries to keep in the cache. Must be at least `1`.
 		 */
 		maxSize: number
+		/**
+		 * How long a settled entry remains cached, in milliseconds. Defaults to
+		 * `Infinity`. `0` expires an entry immediately after it settles.
+		 */
+		maxAge: number
 		retries: number
 		/**
 		 * Delay in milliseconds between retry attempts. `0` (the default) means
@@ -63,9 +68,22 @@ export namespace Cache {
 		 * entry synchronously instead of waiting for its `finally`.
 		 */
 		settled: boolean
+		/**
+		 * When the promise settled, used to calculate its max age.
+		 */
+		settledAt?: number
+		/**
+		 * The effective max age for this entry, in milliseconds.
+		 */
+		maxAge: number
 	} & EntryOptions
 
 	export type EntryOptions = {
+		/**
+		 * How long a settled entry remains cached, in milliseconds. Overrides the
+		 * cache-wide default.
+		 */
+		maxAge?: number
 		retries?: number
 		backoff?: number
 		backoffStrategy?: BackoffStrategy
@@ -86,6 +104,7 @@ export namespace Cache {
 
 const DEFAULT_GLOBAL_OPTIONS = {
 	maxSize: 100,
+	maxAge: Infinity,
 	retries: 3,
 	backoff: 0,
 	backoffStrategy: 'exponential',
@@ -101,6 +120,12 @@ function devWarn(message: string) {
 	if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return
 
 	console.warn(message)
+}
+
+function assertMaxAge(value: number) {
+	if (!(value >= 0)) {
+		throw new RangeError('Cache maxAge must be zero or greater')
+	}
 }
 
 export class Cache {
@@ -126,10 +151,20 @@ export class Cache {
 		if (this.opts.maxSize < 1) {
 			throw new RangeError('Cache maxSize must be at least 1')
 		}
+
+		assertMaxAge(this.opts.maxAge)
 	}
 
 	get size() {
+		for (const [key, entry] of this.cache) {
+			if (this.#isExpired(entry)) this.cache.delete(key)
+		}
+
 		return this.cache.size
+	}
+
+	#isExpired(entry: Cache.Entry) {
+		return entry.settledAt !== undefined && Date.now() - entry.settledAt >= entry.maxAge
 	}
 
 	/**
@@ -142,10 +177,12 @@ export class Cache {
 	#get(key: string) {
 		const cached = this.peek(key)
 
-		if (cached) {
-			const { p, controller, ...rest } = cached
-			this.#set(key, p, controller, rest)
-		}
+		if (!cached) return
+
+		// Reinsert the same entry to update its LRU position. Replacing it with a
+		// new entry would detach the settlement observer attached by read/store.
+		this.cache.delete(key)
+		this.cache.set(key, cached)
 
 		return cached
 	}
@@ -158,7 +195,14 @@ export class Cache {
 	 * @returns The cached promise, or undefined if it doesn't exist.
 	 */
 	peek(key: string) {
-		return this.cache.get(key)
+		const entry = this.cache.get(key)
+
+		if (entry && this.#isExpired(entry)) {
+			this.cache.delete(key)
+			return
+		}
+
+		return entry
 	}
 
 	/**
@@ -203,7 +247,10 @@ export class Cache {
 	#observe(key: string, entry: Cache.Entry, promise: Promise<unknown>) {
 		promise
 			.finally(() => {
-				if (this.cache.get(key) === entry) entry.settled = true
+				if (this.cache.get(key) === entry) {
+					entry.settled = true
+					entry.settledAt = Date.now()
+				}
 			})
 			.catch(() => {}) // swallow the mirrored rejection of the child promise
 	}
@@ -251,7 +298,18 @@ export class Cache {
 			}
 		}
 
-		const entry: Cache.Entry = { p: promise, key, controller, settled: false, ...opts }
+		const maxAge = opts.maxAge ?? this.opts.maxAge
+
+		assertMaxAge(maxAge)
+
+		const entry: Cache.Entry = {
+			p: promise,
+			key,
+			controller,
+			settled: false,
+			...opts,
+			maxAge,
+		}
 
 		this.cache.set(key, entry)
 
@@ -276,6 +334,8 @@ export class Cache {
 		fn: (ctx: Cache.ExecutionContext) => Promise<T>,
 		opts: Cache.EntryOptions = {},
 	) {
+		assertMaxAge(opts.maxAge ?? this.opts.maxAge)
+
 		const existing = this.#get(key)
 		if (existing) return existing.p as Promise<T>
 
