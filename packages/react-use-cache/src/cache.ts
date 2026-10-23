@@ -176,11 +176,10 @@ export class Cache {
 	 */
 	#get(key: string) {
 		const cached = this.peek(key)
-
 		if (!cached) return
 
-		// Reinsert the same entry to update its LRU position. Replacing it with a
-		// new entry would detach the settlement observer attached by read/store.
+		// reinsert the same entry to update its LRU position. Replacing it with a
+		// new entry would detach the settlement observer attached by read/store
 		this.cache.delete(key)
 		this.cache.set(key, cached)
 
