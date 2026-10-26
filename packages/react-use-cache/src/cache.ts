@@ -7,7 +7,7 @@ export function isCacheExecutionContext(arg: unknown): arg is Cache.ExecutionCon
 export namespace Cache {
 	export type BackoffStrategy = 'exponential' | 'fixed'
 
-	export type GlobalOptions = {
+	export type Defaults = {
 		/**
 		 * The maximum number of entries to keep in the cache. Must be at least `1`.
 		 */
@@ -102,7 +102,7 @@ export namespace Cache {
 	}
 }
 
-const DEFAULT_GLOBAL_OPTIONS = {
+const DEFAULT_OPTIONS = {
 	maxSize: 100,
 	maxAge: Infinity,
 	retries: 3,
@@ -137,7 +137,7 @@ export class Cache {
 	/**
 	 * The global options for the cache, such as the maximum size
 	 */
-	opts: Cache.GlobalOptions = DEFAULT_GLOBAL_OPTIONS
+	opts: Cache.Defaults = DEFAULT_OPTIONS
 
 	/**
 	 * The subscriptions for each key, allowing consumers to subscribe to changes in
@@ -145,8 +145,8 @@ export class Cache {
 	 */
 	#subscriptions = new Map<string, Cache.Subscription>()
 
-	constructor(opts?: Partial<Cache.GlobalOptions>) {
-		this.opts = { ...DEFAULT_GLOBAL_OPTIONS, ...opts }
+	constructor(opts?: Partial<Cache.Defaults>) {
+		this.opts = { ...DEFAULT_OPTIONS, ...opts }
 
 		if (this.opts.maxSize < 1) {
 			throw new RangeError('Cache maxSize must be at least 1')

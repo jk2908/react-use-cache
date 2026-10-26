@@ -123,7 +123,7 @@ export function CacheProvider({
 	defaults,
 }: {
 	children: React.ReactNode
-	defaults?: Partial<Cache.GlobalOptions>
+	defaults?: Partial<Cache.Defaults>
 }) {
 	const [cache] = useState(() => new Cache(defaults))
 	const [cached] = useState(() => createCached(cache))
