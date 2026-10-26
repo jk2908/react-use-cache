@@ -2,6 +2,16 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.4.0
+
+### Breaking
+
+- `Cache.GlobalOptions` is now `Cache.Defaults`.
+
+### Fixes
+
+- `CacheProvider` now accepts partial `defaults`, so `defaults={{}}` and individual option overrides type-check.
+
 ## 0.3.0
 
 ### Added
