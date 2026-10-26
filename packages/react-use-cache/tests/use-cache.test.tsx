@@ -34,6 +34,20 @@ describe('Rendering', () => {
 		expect(screen.getByText('Ada')).toBeInTheDocument()
 	})
 
+	test('accepts partial defaults', async () => {
+		await act(async () => {
+			render(
+				<CacheProvider defaults={{}}>
+					<Suspense fallback={<div>Loading...</div>}>
+						<Reader id="1" />
+					</Suspense>
+				</CacheProvider>,
+			)
+		})
+
+		expect(screen.getByText('Ada')).toBeInTheDocument()
+	})
+
 	test('reuses the in-flight promise across siblings (one call)', async () => {
 		const fn = vi.fn(getUser)
 
