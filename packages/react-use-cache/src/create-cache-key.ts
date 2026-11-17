@@ -7,7 +7,7 @@ import { stringify } from 'devalue'
  * containing `\u0000` can never alias a multi-argument key.
  *
  * Values that can't be serialised throw (functions and symbols). That's
- * deliberate — a value with no stable serialisation can't be keyed on reliably,
+ * deliberate: a value with no stable serialisation can't be keyed on reliably,
  * and failing loudly is better than silently conflating distinct values.
  *
  * @param args - The arguments to key on.

@@ -36,8 +36,8 @@ export namespace Cache {
 		 * promise is returned on the retried render. Evicting errors means every
 		 * re-render produces a fresh promise that re-suspends forever.
 		 *
-		 * Set to `false` for imperative (non-render) reads — event handlers,
-		 * service layers — where you want the next read to re-run the function
+		 * Set to `false` for imperative (non-render) reads, such as event handlers
+		 * and service layers, where you want the next read to re-run the function
 		 * rather than return a stale rejection. Don't combine it with
 		 * `use(promise)` in a component.
 		 */
@@ -47,8 +47,8 @@ export namespace Cache {
 		 * more than one subscriber (i.e. it's shared between mounted consumers).
 		 * Defaults to `true` (backwards compatible): `abort()` always runs and
 		 * just dev-warns when it's about to cancel shared work. Set to `false`
-		 * to make `abort()` refuse — returning `false` instead — when the key
-		 * has more than one subscriber.
+		 * to make `abort()` refuse (return `false`) when the key has more than one
+		 * subscriber.
 		 *
 		 * Consumers are counted via `subscribe`/`useVersion`; a component that
 		 * renders a bare `use(promise)` without subscribing is invisible to this
@@ -155,6 +155,11 @@ export class Cache {
 		assertMaxAge(this.opts.maxAge)
 	}
 
+	/**
+	 * The number of entries currently stored. Expired entries are pruned before
+	 * counting, so reading `size` can shrink the cache. There is no background
+	 * timer or sweeper.
+	 */
 	get size() {
 		for (const [key, entry] of this.cache) {
 			if (this.#isExpired(entry)) this.cache.delete(key)
@@ -163,6 +168,13 @@ export class Cache {
 		return this.cache.size
 	}
 
+	/**
+	 * Whether a settled entry has outlived its `maxAge`.
+	 *
+	 * Expiry starts at settlement, not at read time, so in-flight entries never
+	 * expire (`settledAt` is `undefined`). `maxAge: Infinity` never satisfies the
+	 * comparison; `maxAge: 0` expires as soon as the entry settles.
+	 */
 	#isExpired(entry: Cache.Entry) {
 		return entry.settledAt !== undefined && Date.now() - entry.settledAt >= entry.maxAge
 	}
@@ -190,6 +202,8 @@ export class Cache {
 	 * Peek at a cached promise for the given key without promoting it to the most
 	 * recently used position in the cache.
 	 *
+	 * Expired entries are pruned on access and read as missing.
+	 *
 	 * @param key - The key to peek at the cached promise for.
 	 * @returns The cached promise, or undefined if it doesn't exist.
 	 */
@@ -207,6 +221,8 @@ export class Cache {
 	/**
 	 * Check if a cached promise exists for the given key.
 	 *
+	 * Expired entries count as missing and are pruned first.
+	 *
 	 * @param key - The key to check for a cached promise.
 	 * @returns True if a cached promise exists for the key, false otherwise.
 	 */
@@ -215,13 +231,24 @@ export class Cache {
 	}
 
 	/**
-	 * Store a promise under the given key, replacing any existing entry. Use this
-	 * to seed or prewarm the cache with a value you already have, rather than
-	 * going through `read`'s compute-on-miss path.
+	 * Put a promise you already have into the cache under `key`, replacing any
+	 * existing entry.
 	 *
-	 * The promise can't be cancelled through its own entry controller unless it
-	 * listens to the injected signal, so `abort()` on a stored entry just drops
-	 * it once the promise settles.
+	 * `read` is the compute-on-miss path: it calls your function only when the
+	 * key is absent. `store` is the write-only path: it never calls a function,
+	 * never retries, and never dedupes: the promise you pass is cached as-is.
+	 * Use it to seed or prewarm from data you already fetched elsewhere.
+	 *
+	 * A stored promise doesn't receive the cache's `AbortSignal` (it was created
+	 * outside the cache), so `abort()` on a stored entry can only drop it from the
+	 * map, not cancel the work behind it.
+	 *
+	 * @example
+	 * ```ts
+	 * // prewarm from a value fetched elsewhere
+	 * const user = await fetchUser('1')
+	 * cache.store(getUser.key('1'), Promise.resolve(user))
+	 * ```
 	 *
 	 * @param key - The key to store the promise under.
 	 * @param promise - The promise to cache.
@@ -240,7 +267,7 @@ export class Cache {
 	 * Watch a promise and mark its entry as done once it settles (resolve or
 	 * reject), so `abort()` can remove a finished entry instantly. The
 	 * `cache.get(key) === entry` guard handles the race where a newer request
-	 * replaces the entry while this promise is still pending — only the exact
+	 * replaces the entry while this promise is still pending, so only the exact
 	 * entry we stored gets marked.
 	 */
 	#observe(key: string, entry: Cache.Entry, promise: Promise<unknown>) {
@@ -255,16 +282,20 @@ export class Cache {
 	}
 
 	/**
-	 * Set a cached promise for the given key. If the cache is full, the least recently
-	 * used entry will be evicted.
+	 * Write `promise` under `key`, evicting least-recently-used entries until
+	 * there is room.
 	 *
-	 * An evicted entry is only aborted if nobody is still subscribed to its key — a
-	 * live `useVersion` subscriber may still be observing the promise, so cancelling
-	 * it would reject their in-flight work out from under them. The subscription slot
-	 * is left intact; eviction doesn't reset version counters.
+	 * Eviction bounds memory; it is not a cancellation signal. The evicted entry
+	 * leaves the map, but its promise keeps running, so a component already
+	 * suspended on it still resolves instead of receiving an `AbortError`. Use
+	 * `abort()` or `refresh()` when you actually want to cancel.
+	 *
+	 * Eviction doesn't touch `#subscriptions`, so a `useVersion` counter survives
+	 * its key being evicted and re-added.
 	 *
 	 * @param key - The key to set the cached promise for.
 	 * @param promise - The promise to cache.
+	 * @param controller - Controls the `AbortSignal` injected into `read`'s `fn`.
 	 * @param opts - Optional entry options.
 	 * @returns The newly created entry.
 	 */
@@ -282,23 +313,20 @@ export class Cache {
 
 			// maxSize is validated to be >= 1, so a cache that's over capacity is
 			// guaranteed non-empty
-			if (lru !== undefined) {
-				const entry = this.peek(lru)
-
-				if (entry && !this.#subscriptions.has(lru)) {
-					entry.controller.abort()
-				}
-
-				this.cache.delete(lru)
-			} else {
+			if (lru === undefined) {
 				// defensive: normally unreachable, but if user code emptied
 				// `this.cache` mid-loop, break instead of spinning
 				break
 			}
+
+			// drop the entry from the map, but leave its controller alone. Eviction
+			// bounds memory; aborting here would turn a routine cache miss into an
+			// AbortError for whatever component is suspended on this promise.
+			// Explicit cancellation is abort()/refresh()'s job
+			this.cache.delete(lru)
 		}
 
 		const maxAge = opts.maxAge ?? this.opts.maxAge
-
 		assertMaxAge(maxAge)
 
 		const entry: Cache.Entry = {
@@ -316,15 +344,27 @@ export class Cache {
 	}
 
 	/**
-	 * Get a cached promise for the given key, or create a new one if it doesn't exist.
-	 * Initial reads will attempt the function and retry up to `opts.retries` times,
-	 * waiting `opts.backoff` milliseconds between attempts (scaled by
-	 * `opts.backoffStrategy`). `AbortError`s short-circuit both the
-	 * retry loop and any in-flight wait.
+	 * Return the promise cached under `key`, creating and caching one on a miss.
+	 *
+	 * On a miss, `fn` receives an execution context carrying this entry's
+	 * `AbortSignal`. Failures are retried up to `opts.retries` times (default
+	 * `0`), waiting `opts.backoff` ms between attempts, scaled by
+	 * `opts.backoffStrategy`. An `AbortError` from `fn` (including the signal
+	 * being aborted) stops both the retry loop and any in-flight wait.
+	 *
+	 * On a hit, the existing promise is returned as-is and per-call options are
+	 * ignored: the first read for a key wins.
+	 *
+	 * @example
+	 * ```ts
+	 * const user = cache.read('user:1', ({ signal }) =>
+	 * 	fetch('/api/users/1', { signal }),
+	 * )
+	 * ```
 	 *
 	 * @param key - The key to retrieve or create the cached promise for.
-	 * @param fn - The function to create a new promise if it doesn't exist in the cache.
-	 * @param opts - Optional entry options.
+	 * @param fn - Creates the promise on a miss. Receives the entry's abort context.
+	 * @param opts - Optional entry options, used only when a promise is created.
 	 *
 	 * @returns The cached or newly created promise.
 	 */
@@ -419,15 +459,24 @@ export class Cache {
 	}
 
 	/**
-	 * Abort a cached promise for the given key. If the entry exists, its associated
-	 * AbortController will be triggered, and the entry will be removed from the
-	 * cache. Settled entries are removed synchronously; in-flight entries are
-	 * removed once their promise settles.
+	 * Cancel the request behind `key` and drop it from the cache.
 	 *
-	 * By default this always runs. When the key still has more than one
-	 * subscriber, the abort is cancelling work another mounted consumer is
-	 * waiting on, so a development warning is emitted — set `allowSharedAbort:
-	 * false` on the entry to make it refuse (return `false`) in that case.
+	 * The entry's `AbortController` fires the `AbortSignal` that `read` passed to
+	 * your function. A settled entry is removed immediately; an in-flight entry is
+	 * removed once its promise settles, so a `read` in the meantime still observes
+	 * the aborted promise. Use `refresh()` when you want to invalidate and start
+	 * over immediately.
+	 *
+	 * Aborting a key that another mounted consumer is still waiting on cancels
+	 * their work too. More than one subscriber (via `useVersion`/`subscribe`)
+	 * emits a development warning; with `allowSharedAbort: false` the abort is
+	 * refused and this returns `false` instead.
+	 *
+	 * @example
+	 * ```ts
+	 * // cancel when the component unmounts
+	 * useEffect(() => () => getUser.abort(id), [id])
+	 * ```
 	 *
 	 * @param key - The key to abort the cached promise for.
 	 * @returns True if the entry was aborted, false if it didn't exist or was refused.
@@ -569,8 +618,8 @@ export class Cache {
 	/**
 	 * Invalidate the cached promise for the given key, or all keys that match the provided predicate.
 	 * This will remove the entry from the cache and increment the version number, notifying
-	 * all subscribers. Pass `{ abort: true }` to also abort any in-flight entry — use this
-	 * when invalidating to refresh, so the old request is cancelled rather than left running
+	 * all subscribers. Pass `{ abort: true }` to also abort any in-flight entry. Use
+	 * this when invalidating to refresh, so the old request is cancelled rather than left running
 	 * in parallel with the new one.
 	 *
 	 * @param input - The key to invalidate, or a predicate function to match keys to invalidate.
@@ -587,7 +636,7 @@ export class Cache {
 			if (opts?.abort) {
 				this.abort(key)
 				// abort drops settled entries immediately, but an in-flight entry is
-				// only removed once its promise settles — delete it now so the next
+				// only removed once its promise settles. Delete it now so the next
 				// read starts fresh instead of grabbing the dying entry
 				this.delete(key)
 			} else {

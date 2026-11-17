@@ -216,7 +216,7 @@ describe('Cache', () => {
 			expect(cache.abort('user:1')).toBe(true)
 			expect(warn).toHaveBeenCalled()
 
-			// shared but allowed — the request is still cancelled
+			// shared but allowed: the request is still cancelled
 			await expect(read).rejects.toThrow('Aborted')
 			expect(cache.has('user:1')).toBe(false)
 
@@ -357,7 +357,7 @@ describe('Cache', () => {
 		cache.store('a', Promise.resolve(1))
 		cache.store('b', Promise.resolve(2))
 
-		// peek 'a' repeatedly — it should remain the LRU candidate
+		// peek 'a' repeatedly; it should remain the LRU candidate
 		expect(cache.peek('a')).toBeDefined()
 		expect(cache.peek('a')).toBeDefined()
 
@@ -387,21 +387,28 @@ describe('Cache', () => {
 		expect(attempts).toBe(2)
 	})
 
-	test('eviction aborts in-flight entries', async () => {
+	test('eviction does not abort in-flight entries', async () => {
 		const cache = new Cache({ maxSize: 1 })
 
+		let resolveIt!: (value: string) => void
+
 		const read = cache.read('slow', ({ signal }) => {
-			return new Promise((_resolve, reject) => {
+			return new Promise<string>((resolve, reject) => {
+				resolveIt = resolve
 				signal.addEventListener('abort', () => {
 					reject(new DOMException('Aborted', 'AbortError'))
 				})
 			})
 		})
 
-		// pushing a second entry evicts the LRU one, aborting it
+		// pushing a second entry evicts the LRU entry from the map, but the
+		// promise a component is suspended on must still resolve
 		cache.store('fast', Promise.resolve('fast'))
 
-		await expect(read).rejects.toThrow('Aborted')
+		expect(cache.has('slow')).toBe(false)
+
+		resolveIt('done')
+		await expect(read).resolves.toBe('done')
 	})
 
 	test('retries with exponential backoff between attempts', async () => {
@@ -460,7 +467,7 @@ describe('Cache', () => {
 			throw new Error('again')
 		})
 
-		// abort before the 1s backoff elapses — the wait resolves early and the
+		// abort before the 1s backoff elapses: the wait resolves early and the
 		// loop surfaces an AbortError instead of retrying again
 		cache.abort('flaky')
 
