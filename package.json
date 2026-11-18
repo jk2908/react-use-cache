@@ -6,15 +6,11 @@
   "packageManager": "bun@1.4.4",
   "workspaces": ["packages/*", "examples/*"],
   "scripts": {
-    "changeset": "changeset",
-    "version": "changeset version",
-    "release": "changeset publish",
     "lint": "oxlint packages examples",
     "format": "oxfmt \"packages/**/*.ts\" \"packages/**/*.tsx\" \"examples/**/*.ts\" \"examples/**/*.tsx\"",
     "format:check": "oxfmt --check \"packages/**/*.ts\" \"packages/**/*.tsx\" \"examples/**/*.ts\" \"examples/**/*.tsx\""
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.3",
     "oxfmt": "^0.60.0",
     "oxlint": "^1.75.0"
   }
