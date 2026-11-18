@@ -57,7 +57,12 @@ export namespace Cache {
 		allowSharedAbort: boolean
 	}
 
-	export type Cache = Map<string, Entry>
+	export type Store = Map<string, Entry>
+
+	/**
+	 * @deprecated Use {@link Store}.
+	 */
+	export type Cache = Store
 
 	export type Entry = {
 		p: Promise<unknown>
@@ -146,7 +151,7 @@ export class Cache {
 	/**
 	 * The internal cache, mapping keys to cached entries
 	 */
-	cache: Cache.Cache = new Map()
+	cache: Cache.Store = new Map()
 
 	/**
 	 * The global options for the cache, such as the maximum size
