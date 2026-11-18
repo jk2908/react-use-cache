@@ -16,7 +16,7 @@ All notable changes to `react-use-cache` are documented here.
 
 ### Added
 
-- `Cache.store(key, promise, opts?)` — explicitly cache a promise you already
+- `Cache.store(key, promise, opts?)`: explicitly cache a promise you already
   have, for seeding or prewarming, without going through `read`'s
   compute-on-miss path. It creates its own entry controller and tracks
   settlement, so `abort()` behaves identically to `read`-created entries. The
@@ -76,7 +76,7 @@ All notable changes to `react-use-cache` are documented here.
 - Fix: `useVersion` now memoizes its `subscribe`/`getSnapshot` closures, so
   invalidations reliably bump the version and subscribers re-render. Passing
   fresh closures to `useSyncExternalStore` on every render caused React to
-  tear down and re-create the subscription each render — and because
+  tear down and re-create the subscription each render, and because
   `Cache.subscribe`'s cleanup deletes the version slot when the listener count
   reaches zero, the slot was recreated at version `0`, discarding
   `invalidate()` bumps before they could reach a commit.
@@ -88,7 +88,7 @@ All notable changes to `react-use-cache` are documented here.
   imports the scoped `@jk2908/react-use-cache`.
 
 ## 0.1.4
-- Docs: document the `useVersion(key)` re-render vs remount distinction — the
+- Docs: document the `useVersion(key)` re-render vs remount distinction: the
   re-render happens whether or not the returned version is read, but using it
   as a child `key` remounts the subtree (resetting state) instead of preserving
   existing instances.
@@ -115,13 +115,13 @@ A slight upgrade on a simple `Map` cache for `use(Promise)` in React 19.
 
 ### Added
 
-- `useCache()` — reads the `Cache` instance and `cached` wrapper from
+- `useCache()`: reads the `Cache` instance and `cached` wrapper from
   `CacheProvider`
-- `cached(fn, opts)` — wraps an async function with cache-aware dedupe
+- `cached(fn, opts)`: wraps an async function with cache-aware dedupe
   - `key`, `invalidate`, `abort`, `peek` methods
   - Shorthand form: `cached(fn, 'user')`
-- `useVersion(key)` — re-renders a component when a key is invalidated
-- `Cache` class — the underlying `Map<string, Entry>` with:
+- `useVersion(key)`: re-renders a component when a key is invalidated
+- `Cache` class: the underlying `Map<string, Entry>` with:
   - LRU eviction (tunable `maxSize`, default 100)
   - Retries (global or per-call `retries`, default 3)
   - Backoff between retries (exponential or fixed, opt-in via `backoff: ms`)
