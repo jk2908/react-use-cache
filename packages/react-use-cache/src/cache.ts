@@ -366,8 +366,9 @@ export class Cache {
 	 * On a miss, `fn` receives an execution context carrying this entry's
 	 * `AbortSignal`. Failures are retried up to `opts.retries` times (default
 	 * `0`), waiting `opts.backoff` ms between attempts, scaled by
-	 * `opts.backoffStrategy`. An `AbortError` from `fn` (including the signal
-	 * being aborted) stops both the retry loop and any in-flight wait.
+	 * `opts.backoffStrategy`. Only an abort of this entry stops the retry loop
+	 * and any in-flight wait. An `AbortError` thrown by `fn` for its own reasons
+	 * (for example `AbortSignal.timeout`) is retried like any other failure.
 	 *
 	 * On a hit, the existing promise is returned as-is and per-call options are
 	 * ignored: the first read for a key wins.
@@ -422,8 +423,13 @@ export class Cache {
 				try {
 					return await fn(ctx)
 				} catch (err) {
-					if (err instanceof DOMException && err.name === 'AbortError') {
-						throw err
+					// only an abort of this entry stops retries. A fetcher that throws
+					// its own AbortError (for example AbortSignal.timeout) is a normal
+					// failure and should be retried like any other
+					if (controller.signal.aborted) {
+						throw err instanceof DOMException && err.name === 'AbortError'
+							? err
+							: new DOMException('Aborted', 'AbortError')
 					}
 
 					lastError = err

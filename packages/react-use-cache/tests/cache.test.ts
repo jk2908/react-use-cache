@@ -166,6 +166,21 @@ describe('Cache', () => {
 		expect(attempts).toBe(3)
 	})
 
+	test('retries a fetcher AbortError when the cache was not aborted', async () => {
+		const cache = new Cache({ retries: 1 })
+		let attempts = 0
+
+		const read = cache.read('k', async () => {
+			attempts++
+			if (attempts === 1) throw new DOMException('timeout', 'AbortError')
+
+			return 'ok'
+		})
+
+		await expect(read).resolves.toBe('ok')
+		expect(attempts).toBe(2)
+	})
+
 	test('aborts an in-flight entry, rethrowing without consuming retries', async () => {
 		const cache = new Cache({ retries: 3 })
 
