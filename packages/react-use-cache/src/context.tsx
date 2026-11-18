@@ -1,6 +1,6 @@
-import { createContext, useState } from 'react'
+import { createContext, useMemo, useState } from 'react'
 
-import { Cache } from './cache.js'
+import { Cache, devWarn } from './cache.js'
 import { createCacheKey } from './create-cache-key.js'
 
 /**
@@ -76,6 +76,11 @@ type ArgsWithoutExecutionContext<T extends (...args: any[]) => any> =
 	Parameters<T> extends [...infer Args, Cache.ExecutionContext?] ? Args : Parameters<T>
 
 export function createCached(cache: Cache) {
+	// track prefix ownership so two different functions cannot silently share
+	// cache entries, which would return one function's data from the other
+	const owners = new Map<string, unknown>()
+	const warned = new Set<string>()
+
 	return <T extends (...args: any[]) => Promise<any>>(
 		fn: T,
 		a: string | (Cache.EntryOptions & { key: string }),
@@ -86,6 +91,17 @@ export function createCached(cache: Cache) {
 		const { key: userKey, ...opts } = typeof a === 'string' ? { key: a } : a
 
 		const prefix = `${userKey}:`
+		const owner = owners.get(prefix)
+
+		if (owner !== undefined && owner !== fn && !warned.has(prefix)) {
+			warned.add(prefix)
+			devWarn(
+				`[react-use-cache] cached() prefix "${userKey}" is used by more than one function. ` +
+					'They will share cache entries; give each function a distinct key.',
+			)
+		} else if (owner === undefined) {
+			owners.set(prefix, fn)
+		}
 
 		function key(...args: TArgs) {
 			return `${prefix}${createCacheKey(...args)}`
@@ -123,12 +139,22 @@ export const CacheContext = createContext<{
 export function CacheProvider({
 	children,
 	defaults,
+	cache: provided,
 }: {
 	children: React.ReactNode
 	defaults?: Partial<Cache.Defaults>
+	/**
+	 * Use an existing cache instance instead of creating one. Read once: a new
+	 * instance passed later is ignored. `defaults` is ignored when set.
+	 */
+	cache?: Cache
 }) {
-	const [cache] = useState(() => new Cache(defaults))
+	const [cache] = useState(() => provided ?? new Cache(defaults))
 	const [cached] = useState(() => createCached(cache))
 
-	return <CacheContext value={{ cached, cache }}>{children}</CacheContext>
+	// a new `{ cached, cache }` object on every provider render would re-render
+	// every consumer
+	const value = useMemo(() => ({ cached, cache }), [cached, cache])
+
+	return <CacheContext value={value}>{children}</CacheContext>
 }

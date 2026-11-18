@@ -86,6 +86,12 @@ export namespace Cache {
 		allowSharedAbort?: boolean
 	}
 
+	/**
+	 * Options that make sense when seeding a promise you already have. Retry and
+	 * error options are meaningless for `store`, since there is nothing to run.
+	 */
+	export type StoreOptions = Pick<EntryOptions, 'maxAge' | 'allowSharedAbort'>
+
 	export type Subscription = {
 		version: number
 		listeners: Set<() => void>
@@ -111,7 +117,7 @@ const DEFAULT_OPTIONS = {
  * Warn only in development. The shared-abort checks are diagnostics, not user
  * errors that should spam production consoles.
  */
-function devWarn(message: string) {
+export function devWarn(message: string) {
 	// written out in full so bundlers can replace and eliminate it in production
 	if (process.env.NODE_ENV === 'production') return
 
@@ -273,7 +279,7 @@ export class Cache {
 	 * @param opts - Optional entry options.
 	 * @returns The stored promise.
 	 */
-	store<T>(key: string, promise: Promise<T>, opts: Cache.EntryOptions = {}) {
+	store<T>(key: string, promise: Promise<T>, opts: Cache.StoreOptions = {}) {
 		const controller = new AbortController()
 		const entry = this.#set(key, promise, controller, opts)
 		this.#observe(key, entry, promise)
