@@ -123,6 +123,18 @@ function assertMaxAge(value: number) {
 	}
 }
 
+function assertMaxSize(value: number) {
+	if (!Number.isInteger(value) || value < 1) {
+		throw new RangeError('Cache maxSize must be an integer of at least 1')
+	}
+}
+
+function assertRetries(value: number) {
+	if (!Number.isInteger(value) || value < 0) {
+		throw new RangeError('Cache retries must be a non-negative integer')
+	}
+}
+
 export class Cache {
 	/**
 	 * The internal cache, mapping keys to cached entries
@@ -151,11 +163,9 @@ export class Cache {
 			allowSharedAbort: opts?.allowSharedAbort ?? DEFAULT_OPTIONS.allowSharedAbort,
 		}
 
-		if (this.opts.maxSize < 1) {
-			throw new RangeError('Cache maxSize must be at least 1')
-		}
-
+		assertMaxSize(this.opts.maxSize)
 		assertMaxAge(this.opts.maxAge)
+		assertRetries(this.opts.retries)
 	}
 
 	/**
@@ -374,6 +384,7 @@ export class Cache {
 		opts: Cache.EntryOptions = {},
 	) {
 		assertMaxAge(opts.maxAge ?? this.opts.maxAge)
+		assertRetries(opts.retries ?? this.opts.retries)
 
 		const existing = this.#get(key)
 		if (existing) return existing.p as Promise<T>

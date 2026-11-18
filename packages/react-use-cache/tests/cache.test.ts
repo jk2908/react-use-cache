@@ -207,8 +207,19 @@ describe('Cache', () => {
 		await expect(first).rejects.toThrow('Aborted')
 	})
 
-	test('throws when maxSize is below 1', () => {
-		expect(() => new Cache({ maxSize: 0 })).toThrow(RangeError)
+	test('throws for invalid maxSize and retries', () => {
+		for (const maxSize of [0, -1, 1.5, Number.NaN, Infinity]) {
+			expect(() => new Cache({ maxSize })).toThrow(RangeError)
+		}
+
+		for (const retries of [-1, 0.5, Number.NaN, Infinity]) {
+			expect(() => new Cache({ retries })).toThrow(RangeError)
+		}
+
+		const cache = new Cache()
+		expect(() => cache.read('k', () => Promise.resolve(1), { retries: -1 })).toThrow(
+			RangeError,
+		)
 	})
 
 	test('abort on a settled entry removes it synchronously', async () => {
