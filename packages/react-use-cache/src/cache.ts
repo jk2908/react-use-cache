@@ -141,7 +141,15 @@ export class Cache {
 	#subscriptions = new Map<string, Cache.Subscription>()
 
 	constructor(opts?: Partial<Cache.Defaults>) {
-		this.opts = { ...DEFAULT_OPTIONS, ...opts }
+		this.opts = {
+			maxSize: opts?.maxSize ?? DEFAULT_OPTIONS.maxSize,
+			maxAge: opts?.maxAge ?? DEFAULT_OPTIONS.maxAge,
+			retries: opts?.retries ?? DEFAULT_OPTIONS.retries,
+			backoff: opts?.backoff ?? DEFAULT_OPTIONS.backoff,
+			backoffStrategy: opts?.backoffStrategy ?? DEFAULT_OPTIONS.backoffStrategy,
+			cacheErrors: opts?.cacheErrors ?? DEFAULT_OPTIONS.cacheErrors,
+			allowSharedAbort: opts?.allowSharedAbort ?? DEFAULT_OPTIONS.allowSharedAbort,
+		}
 
 		if (this.opts.maxSize < 1) {
 			throw new RangeError('Cache maxSize must be at least 1')
