@@ -178,9 +178,33 @@ describe('Cache', () => {
 
 		cache.abort('slow')
 
-		await expect(read).rejects.toThrow('Aborted')
-		// aborted entry is removed once settled; a fresh read starts clean
+		// removed in the same tick, before the promise settles
 		expect(cache.has('slow')).toBe(false)
+
+		await expect(read).rejects.toThrow('Aborted')
+	})
+
+	test('a read immediately after abort starts a fresh request', async () => {
+		const cache = new Cache()
+
+		const first = cache.read('user:1', ({ signal }) => {
+			return new Promise((_resolve, reject) => {
+				signal.addEventListener('abort', () => {
+					reject(new DOMException('Aborted', 'AbortError'))
+				})
+			})
+		})
+
+		expect(cache.abort('user:1')).toBe(true)
+		expect(cache.has('user:1')).toBe(false)
+
+		// the remount path: a read in the same tick must not inherit the promise
+		// that was just cancelled
+		const second = cache.read('user:1', async () => 'fresh')
+
+		expect(second).not.toBe(first)
+		await expect(second).resolves.toBe('fresh')
+		await expect(first).rejects.toThrow('Aborted')
 	})
 
 	test('throws when maxSize is below 1', () => {

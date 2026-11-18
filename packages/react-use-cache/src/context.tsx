@@ -38,14 +38,16 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	key(...args: ArgsWithoutExecutionContext<T>): string
 
 	/**
-	 * Invalidates the cached result for the given arguments.
+	 * Drops the entry and notifies subscribers, but leaves any in-flight request
+	 * running. Use this when a suspended consumer should still resolve normally.
 	 *
 	 * @see Cache.invalidate
 	 */
 	invalidate(...args: ArgsWithoutExecutionContext<T>): void
 
 	/**
-	 * Aborts an in-flight request for the given arguments.
+	 * Cancels the request and removes the entry without notifying subscribers, so
+	 * nothing re-renders or refetches.
 	 *
 	 * @returns `true` if a request was aborted; otherwise `false`.
 	 * @see Cache.abort
@@ -53,8 +55,8 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	abort(...args: ArgsWithoutExecutionContext<T>): boolean
 
 	/**
-	 * Invalidates the cached result for the given arguments, aborting any
-	 * in-flight request so a subsequent read starts clean.
+	 * Cancels the request, drops the entry, and notifies subscribers so they
+	 * re-read. This is `abort` plus `invalidate` in one call.
 	 *
 	 * @see Cache.invalidate
 	 */

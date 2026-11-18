@@ -64,11 +64,6 @@ export namespace Cache {
 		key: string
 		controller: AbortController
 		/**
-		 * Whether the promise has settled. Used so `abort` can drop a settled
-		 * entry synchronously instead of waiting for its `finally`.
-		 */
-		settled: boolean
-		/**
 		 * When the promise settled, used to calculate its max age.
 		 */
 		settledAt?: number
@@ -264,17 +259,15 @@ export class Cache {
 	}
 
 	/**
-	 * Watch a promise and mark its entry as done once it settles (resolve or
-	 * reject), so `abort()` can remove a finished entry instantly. The
-	 * `cache.get(key) === entry` guard handles the race where a newer request
-	 * replaces the entry while this promise is still pending, so only the exact
-	 * entry we stored gets marked.
+	 * Record when the promise settles, so `maxAge` starts counting from settlement
+	 * rather than from the read. The `cache.get(key) === entry` guard handles the
+	 * race where a newer request replaces the entry while this promise is still
+	 * pending, so only the entry we stored gets stamped.
 	 */
 	#observe(key: string, entry: Cache.Entry, promise: Promise<unknown>) {
 		promise
 			.finally(() => {
 				if (this.cache.get(key) === entry) {
-					entry.settled = true
 					entry.settledAt = Date.now()
 				}
 			})
@@ -333,7 +326,6 @@ export class Cache {
 			p: promise,
 			key,
 			controller,
-			settled: false,
 			...opts,
 			maxAge,
 		}
@@ -459,13 +451,17 @@ export class Cache {
 	}
 
 	/**
-	 * Cancel the request behind `key` and drop it from the cache.
+	 * Cancel the request behind `key` and remove the entry from the cache
+	 * immediately.
 	 *
 	 * The entry's `AbortController` fires the `AbortSignal` that `read` passed to
-	 * your function. A settled entry is removed immediately; an in-flight entry is
-	 * removed once its promise settles, so a `read` in the meantime still observes
-	 * the aborted promise. Use `refresh()` when you want to invalidate and start
-	 * over immediately.
+	 * your function, and the entry leaves the map in the same tick. A `read` after
+	 * this point starts a fresh request rather than returning the aborted promise,
+	 * so an unmount then remount re-fetches instead of inheriting an `AbortError`
+	 * from work it never started.
+	 *
+	 * Anyone already holding the promise still sees it reject. Use `refresh()` when
+	 * you want to invalidate and start over in one call.
 	 *
 	 * Aborting a key that another mounted consumer is still waiting on cancels
 	 * their work too. More than one subscriber (via `useVersion`/`subscribe`)
@@ -501,18 +497,10 @@ export class Cache {
 
 		entry.controller.abort()
 
-		if (entry.settled) {
-			this.delete(key)
-			return true
-		}
-
-		entry.p
-			.finally(() => {
-				if (this.peek(key)?.p === entry.p) {
-					this.delete(key)
-				}
-			})
-			.catch(() => {})
+		// remove the entry before returning so a read in the same tick starts a
+		// fresh request. Waiting for settlement would hand the dying promise to a
+		// remounting consumer.
+		this.delete(key)
 
 		return true
 	}
@@ -634,15 +622,13 @@ export class Cache {
 	invalidate(input: string | ((key: string) => boolean), opts?: { abort?: boolean }) {
 		const drop = (key: string) => {
 			if (opts?.abort) {
+				// abort() removes the entry itself, unless it refused a shared key
+				// (allowSharedAbort: false). Delete again so an invalidation always
+				// drops the entry.
 				this.abort(key)
-				// abort drops settled entries immediately, but an in-flight entry is
-				// only removed once its promise settles. Delete it now so the next
-				// read starts fresh instead of grabbing the dying entry
-				this.delete(key)
-			} else {
-				this.delete(key)
 			}
 
+			this.delete(key)
 			this.bump(key)
 		}
 

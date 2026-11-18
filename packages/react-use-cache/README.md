@@ -101,6 +101,20 @@ The returned function has a few attached methods:
 | `getUser.abort(...args)`        | abort an in-flight entry; returns `boolean`                    |
 | `getUser.peek(...args)`         | read the entry without promoting it (no LRU bump)              |
 
+The three lifecycle methods differ in what they do to an in-flight request and
+to subscribers:
+
+| call         | drops entry | cancels request | notifies subscribers |
+| ------------ | ----------- | --------------- | -------------------- |
+| `invalidate` | yes         | no              | yes                  |
+| `abort`      | yes         | yes             | no                   |
+| `refresh`    | yes         | yes             | yes                  |
+
+Use `invalidate` when a suspended component should still resolve (the entry is
+dropped but the old request is left running), `abort` to cancel without
+triggering a re-render or refetch, and `refresh` for the mutation-then-refetch
+case.
+
 > **Note:** `cached(fn, opts)` returns a fresh function on every call, so don't
 > rely on a stable identity. Calling it inside render (as above) is fine since
 > `Cache` dedupes by key, not by reference. If a consumer needs a stable
@@ -225,8 +239,9 @@ function User({ promise }: { promise: Promise<User> }) {
 ### Abort on unmount
 
 The classic unmount pattern (cancel the request when the component goes away)
-is one line, because `abort()` on an in-flight entry also removes it from the
-cache:
+is one line, because `abort()` also removes the entry from the cache. The
+removal happens immediately, so a remount in the same tick starts a fresh
+request instead of inheriting the cancelled promise:
 
 ```tsx
 function User({ id }) {
