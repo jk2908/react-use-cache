@@ -1,14 +1,14 @@
-import { Suspense, use, useState, useTransition } from 'react'
-import { ErrorBoundary } from 'react-error-boundary'
 import {
 	Cached,
 	CacheProvider,
 	useCache,
 	useVersion,
-	type ExecutionContext,
+	type CacheExecutionContext,
 } from '@jk2908/react-use-cache'
+import { Suspense, use, useState, useTransition } from 'react'
+import { ErrorBoundary } from 'react-error-boundary'
 
-async function fetchUser(id: string, { signal }: ExecutionContext) {
+async function fetchUser(id: string, { signal }: CacheExecutionContext) {
 	const res = await fetch(`https://dummyjson.com/users/${id}`, {
 		signal,
 	})
@@ -20,7 +20,7 @@ async function fetchUser(id: string, { signal }: ExecutionContext) {
 	return res.json()
 }
 
-async function fetchSlowUser(id: string, { signal }: ExecutionContext) {
+async function fetchSlowUser(id: string, { signal }: CacheExecutionContext) {
 	const res = await fetch(`https://dummyjson.com/users/${id}?delay=3000`, {
 		signal,
 	})
@@ -28,7 +28,7 @@ async function fetchSlowUser(id: string, { signal }: ExecutionContext) {
 	return res.json()
 }
 
-async function fetchBrokenUser(_id: string, { signal }: ExecutionContext) {
+async function fetchBrokenUser(_id: string, { signal }: CacheExecutionContext) {
 	const res = await fetch(`https://dummyjson.com/users/99999`, {
 		signal,
 	})
@@ -66,7 +66,7 @@ function Demo() {
 		backoffStrategy: 'exponential',
 	})
 
-	const getInlineUser = cached(async (id: string, { signal }: ExecutionContext) => {
+	const getInlineUser = cached(async (id: string, { signal }: CacheExecutionContext) => {
 		const res = await fetch(`https://dummyjson.com/users/${id}`, {
 			signal,
 		})

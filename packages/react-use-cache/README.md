@@ -76,15 +76,15 @@ const getUser = cached(fetchUser, {
 })
 ```
 
-Shorthand: `cached(fetchUser, 'user')` accepts a bare string when you don't need other options. Pass `ExecutionContext` as the last parameter to gain access to an `AbortSignal`:
+Shorthand: `cached(fetchUser, 'user')` accepts a bare string when you don't need other options. Pass `CacheExecutionContext` as the last parameter to gain access to an `AbortSignal`:
 
 ```ts
-async function fetchUser(id: string, { signal }: ExecutionContext) { … }
+async function fetchUser(id: string, { signal }: CacheExecutionContext) { … }
 
 type GetUser = Cached<typeof fetchUser> // (id: string) => Promise<User>
 ```
 
-`Cached` strips `ExecutionContext` off the end of the param list - the cache passes it in for you, so the public signature just has the user-facing args. The returned function resolves to whatever your function returns.
+`Cached` strips `CacheExecutionContext` off the end of the param list - the cache passes it in for you, so the public signature just has the user-facing args. The returned function resolves to whatever your function returns.
 
 Cache keys are built by serialising the arguments, so structurally equal args always
 dedupe to the same entry and distinct args never collide: `1`, `'1'`, and `1n`
