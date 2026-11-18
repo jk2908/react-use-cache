@@ -4,9 +4,13 @@ A slight upgrade on a simple `Map` cache for `use(Promise)` in React 19.
 
 ```tsx
 import { Suspense, use } from 'react'
-import { CacheProvider, useCache } from 'react-use-cache'
+import {
+  CacheProvider,
+  useCache,
+  type CacheExecutionContext,
+} from '@jk2908/react-use-cache'
 
-async function fetchUser(id, { signal }) {
+async function fetchUser(id: string, { signal }: CacheExecutionContext) {
   const res = await fetch(`/api/users/${id}`, { signal })
   return res.json()
 }
@@ -40,6 +44,14 @@ function User({ id }) {
 - Errors stay pinned (Suspense-safe) unless you opt into `cacheErrors: false`
 - Optional `maxAge` expiry for settled entries
 - Unambiguous cache keys: `1`, `'1'`, and `1n` never collide
+
+## Install
+
+```sh
+npm install @jk2908/react-use-cache
+```
+
+Requires React 19 and a modern bundler.
 
 ## API
 
@@ -224,9 +236,10 @@ version tracking.
 ### Refresh after mutation
 
 Once `use(getUser(id))` has resolved, it won't re-read on its own. `refresh`
-(alias: `invalidate`) drops the cache entry, cancels any in-flight request, and
-bumps the version. The bump triggers a re-render; since the entry was deleted,
-`getUser(id)` returns a fresh pending promise that re-suspends:
+drops the cache entry, cancels any in-flight request, and bumps the version.
+`invalidate` does the same without cancelling. The bump triggers a re-render;
+since the entry was deleted, `getUser(id)` returns a fresh pending promise that
+re-suspends:
 
 ```tsx
 function User({ id }) {
@@ -363,6 +376,13 @@ API. Every matching key is dropped and its version bumped, notifying any
 entry is no longer cached, so those consumers refetch instead of keeping stale
 data. The underlying aborting variant,
 `cache.invalidate(predicate, { abort: true })` is also available.
+
+## Server rendering
+
+`CacheProvider` creates its cache from its own state, so on the server each
+render pass gets a fresh instance and nothing leaks between requests. Do not
+hoist a `Cache` to module scope in a server process; it would be shared across
+requests.
 
 ## License
 
