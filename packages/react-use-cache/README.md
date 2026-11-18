@@ -152,18 +152,39 @@ Expiry is lazy: the entry is removed when `read`, `peek`, `has`, or `size` next 
 
 ### `useVersion(key)`
 
+`useVersion` subscribes the component to a key and returns the key's current
+version number:
+
 ```tsx
 const version = useVersion(getUser.key(id))
 ```
 
-Re-renders the component whenever `key` is invalidated. Pair it with
-`getUser.invalidate(...)` to refresh a mounted subtree after a mutation.
+The version starts at `0` and increases by one on each invalidation. The counter
+is kept while at least one component is subscribed to the key.
 
-The re-render happens whether or not you read the returned `version`: the
-subscription alone drives it. The value only matters for what you pass it into:
+The subscription is what makes `invalidate` and `refresh` reach mounted
+components. A component that renders a cached promise should also subscribe to
+its key; without the subscription, invalidation still drops the entry, but the
+component will not re-render until something else causes it to. The canonical
+read is:
 
-- **Ignore it** → the component just re-renders. Existing instances keep their
-  local state:
+```tsx
+function User({ id }) {
+  const { cached } = useCache()
+  const getUser = cached(fetchUser, { key: 'user' })
+
+  useVersion(getUser.key(id)) // subscribe to invalidations
+  const user = use(getUser(id)) // read the shared promise
+
+  return <p>{user.name}</p>
+}
+```
+
+The re-render happens whether or not you read the returned version: the
+subscription alone drives it. The return value only matters if you pass it into
+a child `key`:
+
+- **Ignore it** → the component re-renders and keeps its local state:
 
   ```tsx
   function App({ id }) {
@@ -173,8 +194,8 @@ subscription alone drives it. The value only matters for what you pass it into:
   }
   ```
 
-- **Use it as a `key`** → the keyed child remounts whenever the version
-  changes (i.e. every invalidation), resetting its state:
+- **Use it as a `key`** → the keyed child remounts whenever the version changes
+  (i.e. every invalidation), resetting its state:
 
   ```tsx
   function App({ id }) {
@@ -186,8 +207,8 @@ subscription alone drives it. The value only matters for what you pass it into:
 
 Use the `key` form when a refresh represents a new resource and its subtree
 should start clean, e.g. a document editor remounting the editor when a freshly
-saved draft is loaded. Otherwise prefer ignoring the value so child components
-keep their state.
+saved draft is loaded. Otherwise ignore the value so child components keep their
+state.
 
 ### `Cache`
 
