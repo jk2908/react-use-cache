@@ -91,6 +91,15 @@ dedupe to the same entry and distinct args never collide: `1`, `'1'`, and `1n`
 produce different keys; `getUser.key(id)` gives you the exact string, which is also
 what `useVersion` and the raw `Cache` methods expect.
 
+Two serialisation limits are worth knowing:
+
+- Object key order is part of the key. `{ id: 1, page: 2 }` and
+  `{ page: 2, id: 1 }` are different entries. Pass a stable shape, or a primitive
+  identifier such as the id instead of the whole object.
+- Functions, symbols, and non-POJO values (class instances, `Error`, DOM nodes)
+  throw rather than producing an unstable key. `Date`, `Map`, `Set`, `RegExp`,
+  `URL`, and `URLSearchParams` are supported.
+
 The returned function has a few attached methods:
 
 | method                          | description                                                    |
