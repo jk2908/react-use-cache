@@ -29,7 +29,7 @@
     },
     "packages/react-use-cache": {
       "name": "@jk2908/react-use-cache",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "dependencies": {
         "devalue": "^5.8.2",
       },

@@ -2,6 +2,18 @@
 
 All notable changes to `react-use-cache` are documented here.
 
+## 0.5.0
+
+### Minor Changes
+
+- 6eabfce: Fix eviction aborting in-flight reads, `abort()` keeping the entry until settlement, predicate invalidation missing subscribers whose entry had been evicted, and `store()` not notifying subscribers.
+
+  Rename `ExecutionContext` to `CacheExecutionContext`, and export `isCacheExecutionContext` and `createCacheKey`.
+
+  `peek()` now returns `Cache.EntryInfo`, a read-only view that omits the internal `AbortController` and option fields. `Cache.Store` is the map type, with `Cache.Cache` kept as a deprecated alias.
+
+  `cached()` accepts `keySerialiser` to replace `createCacheKey` for that wrapper.
+
 ## 0.4.0
 
 ### Breaking
@@ -34,20 +46,20 @@ All notable changes to `react-use-cache` are documented here.
 
 ### Added
 
-- `cached.refresh(...args)` - invalidate a key *and* abort any in-flight
+- `cached.refresh(...args)` - invalidate a key _and_ abort any in-flight
   request in one call, so a refresh never leaves the old request running in
   parallel with the new one (also available as
   `Cache.invalidate(key | predicate, { abort: true })`).
 - `allowSharedAbort` option (global or per-call, default `true`). `abort()` on
   a key that more than one subscriber is still using emits a development-only
   warning (it still proceeds, keeping backwards compatibility). Set
-  `allowSharedAbort: false` to make `abort()` *refuse* in that case - it
+  `allowSharedAbort: false` to make `abort()` _refuse_ in that case - it
   returns `false` and leaves the request running. Consumers are counted via
   `useVersion`/`cache.subscribe`; bare `use(promise)` components aren't tracked.
 - `cacheErrors` option (global or per-call). Defaults to `true`; set `false` to
   evict rejected promises as soon as they settle so the next read re-runs the
   function. Intended for imperative reads - pinning the rejection is required
-  for Suspense, since an `ErrorBoundary` only settles when the *same* rejected
+  for Suspense, since an `ErrorBoundary` only settles when the _same_ rejected
   promise is re-thrown on the retried render.
 
 ### Changed
@@ -73,6 +85,7 @@ All notable changes to `react-use-cache` are documented here.
   default. It only matters when `backoff > 0` and no explicit strategy is set.
 
 ## 0.1.6
+
 - Fix: `useVersion` now memoizes its `subscribe`/`getSnapshot` closures, so
   invalidations reliably bump the version and subscribers re-render. Passing
   fresh closures to `useSyncExternalStore` on every render caused React to
@@ -82,29 +95,34 @@ All notable changes to `react-use-cache` are documented here.
   `invalidate()` bumps before they could reach a commit.
 
 ## 0.1.5
+
 - Fix: the Vite example referenced the package by its unscoped name
   (`react-use-cache`), so `bun install` failed with
   `react-use-cache@workspace:* failed to resolve`. It now depends on and
   imports the scoped `@jk2908/react-use-cache`.
 
 ## 0.1.4
+
 - Docs: document the `useVersion(key)` re-render vs remount distinction: the
   re-render happens whether or not the returned version is read, but using it
   as a child `key` remounts the subtree (resetting state) instead of preserving
   existing instances.
 
 ## 0.1.3
+
 - Fix: `CacheProvider` now creates its `cached` wrapper once for the lifetime
   of the `Cache` instance instead of on every render. The identity of `cached`
   is now stable, so `useMemo(() => cached(fn, opts), [cached])` in consumers
   is no longer defeated by a fresh `cached` reference on each render.
 
 ## 0.1.2
+
 - README additions and changes
 - Type naming changes
 - Add Transition example to Vite example app
 
 ## 0.1.1
+
 README additions and changes.
 
 ## 0.1.0
