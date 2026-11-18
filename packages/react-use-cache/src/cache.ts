@@ -333,7 +333,13 @@ export class Cache {
 		// drop any existing entry
 		this.cache.delete(key)
 
-		while (this.size >= this.opts.maxSize) {
+		// prune expired entries once instead of rescanning the map on every
+		// capacity check
+		for (const [candidate, entry] of this.cache) {
+			if (this.#isExpired(entry)) this.cache.delete(candidate)
+		}
+
+		while (this.cache.size >= this.opts.maxSize) {
 			const lru = this.cache.keys().next().value
 
 			// maxSize is validated to be >= 1, so a cache that's over capacity is

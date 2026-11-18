@@ -1,6 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
 
 import { Cache } from '../src/cache.js'
+import { createCached } from '../src/context.js'
 
 describe('Cache', () => {
 	test('pins rejected promises by default until they are invalidated', async () => {
@@ -727,5 +728,17 @@ describe('maxAge', () => {
 		expect(() => cache.read('value', () => Promise.resolve(1), { maxAge: -1 })).toThrow(
 			RangeError,
 		)
+	})
+})
+
+describe('cached', () => {
+	test('supports a custom keySerialiser', () => {
+		const cache = new Cache()
+		const getUser = createCached(cache)(async (id: string) => ({ id }), {
+			key: 'user',
+			keySerialiser: (id: string) => id,
+		})
+
+		expect(getUser.key('42')).toBe('user:42')
 	})
 })

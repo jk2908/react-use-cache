@@ -75,6 +75,19 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 type ArgsWithoutExecutionContext<T extends (...args: any[]) => any> =
 	Parameters<T> extends [...infer Args, Cache.ExecutionContext?] ? Args : Parameters<T>
 
+/**
+ * Options accepted by `cached(fn, opts)`.
+ */
+export type CachedOptions = Cache.EntryOptions & {
+	key: string
+	/**
+	 * Replaces `createCacheKey` for this function. Receives the same arguments as
+	 * the cached function and returns the fragment after the key prefix. Use it
+	 * when arguments are large, or not serialisable by `createCacheKey`.
+	 */
+	keySerialiser?: (...args: any[]) => string
+}
+
 export function createCached(cache: Cache) {
 	// track prefix ownership so two different functions cannot silently share
 	// cache entries, which would return one function's data from the other
@@ -83,12 +96,19 @@ export function createCached(cache: Cache) {
 
 	return <T extends (...args: any[]) => Promise<any>>(
 		fn: T,
-		a: string | (Cache.EntryOptions & { key: string }),
+		a: string | CachedOptions,
 	) => {
 		type TArgs = ArgsWithoutExecutionContext<T>
 		type TValue = Awaited<ReturnType<T>>
 
-		const { key: userKey, ...opts } = typeof a === 'string' ? { key: a } : a
+		const {
+			key: userKey,
+			keySerialiser,
+			...opts
+		} = typeof a === 'string' ? { key: a } : a
+
+		// when a serialiser is supplied, `createCacheKey` is never called
+		const serialise = keySerialiser ?? createCacheKey
 
 		const prefix = `${userKey}:`
 		const owner = owners.get(prefix)
@@ -104,7 +124,7 @@ export function createCached(cache: Cache) {
 		}
 
 		function key(...args: TArgs) {
-			return `${prefix}${createCacheKey(...args)}`
+			return `${prefix}${serialise(...args)}`
 		}
 
 		const cached: Cached<T> = Object.assign(

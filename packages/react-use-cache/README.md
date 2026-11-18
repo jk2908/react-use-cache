@@ -85,6 +85,7 @@ const getUser = cached(fetchUser, {
   backoff: 100, // optional ms delay between retries; default 0 (no delay)
   backoffStrategy: 'exponential', // 'exponential' (default) | 'fixed'
   allowSharedAbort: false, // optional: refuse to abort while other consumers subscribe
+  keySerialiser: id => id, // optional: replaces createCacheKey
 })
 ```
 
@@ -111,6 +112,17 @@ Two serialisation limits are worth knowing:
 - Functions, symbols, and non-POJO values (class instances, `Error`, DOM nodes)
   throw rather than producing an unstable key. `Date`, `Map`, `Set`, `RegExp`,
   `URL`, and `URLSearchParams` are supported.
+
+Pass `keySerialiser` to replace the default serialiser when arguments are large or
+not serialisable. It receives the same arguments as the cached function and
+returns the fragment after the prefix. When set, `createCacheKey` is not called:
+
+```ts
+const getUser = cached(fetchUser, {
+  key: 'user',
+  keySerialiser: id => id,
+})
+```
 
 The returned function has a few attached methods:
 
