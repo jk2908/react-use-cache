@@ -78,6 +78,18 @@ export namespace Cache {
 		maxAge: number
 	} & EntryOptions
 
+	/**
+	 * The public view of an entry. It deliberately omits the internal
+	 * `AbortController` and option fields, so callers cancel through `abort()`
+	 * and `refresh()` rather than reaching into the entry.
+	 */
+	export type EntryInfo = {
+		key: string
+		p: Promise<unknown>
+		settledAt?: number
+		maxAge: number
+	}
+
 	export type EntryOptions = {
 		/**
 		 * How long a settled entry remains cached, in milliseconds. Overrides the
@@ -212,7 +224,7 @@ export class Cache {
 	 * @returns The cached promise, or undefined if it doesn't exist.
 	 */
 	#get(key: string) {
-		const cached = this.peek(key)
+		const cached = this.#peekEntry(key)
 		if (!cached) return
 
 		// reinsert the same entry to update its LRU position. Replacing it with a
@@ -224,15 +236,10 @@ export class Cache {
 	}
 
 	/**
-	 * Peek at a cached promise for the given key without promoting it to the most
-	 * recently used position in the cache.
-	 *
-	 * Expired entries are pruned on access and read as missing.
-	 *
-	 * @param key - The key to peek at the cached promise for.
-	 * @returns The cached promise, or undefined if it doesn't exist.
+	 * The internal entry for a key, pruning it if expired. Internal callers need
+	 * the controller and the option fields that `peek` does not expose.
 	 */
-	peek(key: string) {
+	#peekEntry(key: string) {
 		const entry = this.cache.get(key)
 
 		if (entry && this.#isExpired(entry)) {
@@ -244,6 +251,27 @@ export class Cache {
 	}
 
 	/**
+	 * Peek at a cached promise for the given key without promoting it to the most
+	 * recently used position in the cache.
+	 *
+	 * Expired entries are pruned on access and read as missing.
+	 *
+	 * @param key - The key to peek at the cached promise for.
+	 * @returns A read-only view of the entry, or undefined if it doesn't exist.
+	 */
+	peek(key: string): Cache.EntryInfo | undefined {
+		const entry = this.#peekEntry(key)
+		if (!entry) return
+
+		return {
+			key: entry.key,
+			p: entry.p,
+			settledAt: entry.settledAt,
+			maxAge: entry.maxAge,
+		}
+	}
+
+	/**
 	 * Check if a cached promise exists for the given key.
 	 *
 	 * Expired entries count as missing and are pruned first.
@@ -252,7 +280,7 @@ export class Cache {
 	 * @returns True if a cached promise exists for the key, false otherwise.
 	 */
 	has(key: string) {
-		return this.peek(key) !== undefined
+		return this.#peekEntry(key) !== undefined
 	}
 
 	/**
@@ -549,7 +577,7 @@ export class Cache {
 	 * @returns True if the entry was aborted, false if it didn't exist or was refused.
 	 */
 	abort(key: string) {
-		const entry = this.peek(key)
+		const entry = this.#peekEntry(key)
 		if (!entry) return false
 		if (!this.#canAbort(key, entry)) return false
 

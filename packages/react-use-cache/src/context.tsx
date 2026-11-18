@@ -68,7 +68,7 @@ export type Cached<T extends (...args: any[]) => Promise<any>> = {
 	 *
 	 * @see Cache.peek
 	 */
-	peek(...args: ArgsWithoutExecutionContext<T>): Cache.Entry | undefined
+	peek(...args: ArgsWithoutExecutionContext<T>): Cache.EntryInfo | undefined
 }
 
 // remove `Cache.ExecutionContext` from arg list if it exists
