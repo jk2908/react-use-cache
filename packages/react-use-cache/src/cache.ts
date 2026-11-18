@@ -252,6 +252,10 @@ export class Cache {
 	 * never retries, and never dedupes: the promise you pass is cached as-is.
 	 * Use it to seed or prewarm from data you already fetched elsewhere.
 	 *
+	 * Writing notifies `useVersion`/`useCached` subscribers for the key, so a
+	 * mounted consumer re-renders against the new promise. Prewarming before
+	 * anyone reads the key is a no-op.
+	 *
 	 * A stored promise doesn't receive the cache's `AbortSignal` (it was created
 	 * outside the cache), so `abort()` on a stored entry can only drop it from the
 	 * map, not cancel the work behind it.
@@ -272,6 +276,9 @@ export class Cache {
 		const controller = new AbortController()
 		const entry = this.#set(key, promise, controller, opts)
 		this.#observe(key, entry, promise)
+
+		// a write is a change: let mounted consumers re-render against it
+		this.bump(key)
 
 		return promise
 	}

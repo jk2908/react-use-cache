@@ -184,9 +184,10 @@ keep their state.
 
 The class is also exported directly, for tests or non-React code. See
 `isCacheExecutionContext` for checking the abort context inside a fetcher.
-Beyond the wrapper methods it offers `invalidate(key | predicate, { abort })`
-for refresh-style drops, plus `subscribe`/`version` for manual version
-tracking.
+Beyond the wrapper methods it offers `store(key, promise)` to seed an entry you
+already have (writing notifies subscribers), `invalidate(key | predicate,
+{ abort })` for refresh-style drops, plus `subscribe`/`version` for manual
+version tracking.
 
 ## Patterns
 

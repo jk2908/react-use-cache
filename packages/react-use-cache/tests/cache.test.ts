@@ -129,9 +129,10 @@ describe('Cache', () => {
 		const cache = new Cache({ maxSize: 1 })
 		const seen: number[] = []
 
+		cache.store('user:1', Promise.resolve('a'))
+
 		const unsub = cache.subscribe('user:1', () => seen.push(cache.version('user:1')))
 
-		cache.store('user:1', Promise.resolve('a'))
 		cache.invalidate('user:1')
 		expect(cache.version('user:1')).toBe(1)
 
@@ -330,7 +331,7 @@ describe('Cache', () => {
 		await expect(read).rejects.toThrow('Aborted')
 	})
 
-	test('subscribe + version track invalidations', async () => {
+	test('subscribe + version track writes and invalidations', async () => {
 		const cache = new Cache()
 
 		const seen: number[] = []
@@ -343,8 +344,8 @@ describe('Cache', () => {
 		cache.invalidate('user:1')
 
 		await new Promise(r => setTimeout(r, 0))
-		expect(cache.version('user:1')).toBe(1)
-		expect(seen).toEqual([1])
+		expect(cache.version('user:1')).toBe(2)
+		expect(seen).toEqual([1, 2])
 
 		unsub()
 		// last listener gone -> slot is dropped, so version reports 0 again.
@@ -364,12 +365,12 @@ describe('Cache', () => {
 	test('clear aborts and bumps every subscribed key', async () => {
 		const cache = new Cache()
 
+		cache.store('user:1', Promise.resolve('a'))
+		cache.store('post:1', Promise.resolve('b'))
+
 		const seen: string[] = []
 		cache.subscribe('user:1', () => seen.push('user:1'))
 		cache.subscribe('post:1', () => seen.push('post:1'))
-
-		cache.store('user:1', Promise.resolve('a'))
-		cache.store('post:1', Promise.resolve('b'))
 
 		expect(cache.clear()).toBe(2)
 		expect(seen.toSorted()).toEqual(['post:1', 'user:1'])
@@ -515,13 +516,13 @@ describe('Cache', () => {
 		const cache = new Cache()
 		const seen: string[] = []
 
-		cache.subscribe('user:1', () => seen.push('user:1'))
-		cache.subscribe('user:2', () => seen.push('user:2'))
-		cache.subscribe('post:1', () => seen.push('post:1'))
-
 		cache.store('user:1', Promise.resolve('a'))
 		cache.store('user:2', Promise.resolve('b'))
 		cache.store('post:1', Promise.resolve('c'))
+
+		cache.subscribe('user:1', () => seen.push('user:1'))
+		cache.subscribe('user:2', () => seen.push('user:2'))
+		cache.subscribe('post:1', () => seen.push('post:1'))
 
 		// predicate is the canonical way to invalidate keys sharing a prefix
 		cache.invalidate(key => key.startsWith('user:'))
