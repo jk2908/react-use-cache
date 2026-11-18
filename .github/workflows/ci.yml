@@ -13,8 +13,14 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
-      - run: bun run test
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run format:check
+      - run: bun run typecheck
+        working-directory: packages/react-use-cache
+      - run: bun run test:coverage
         working-directory: packages/react-use-cache
       - run: bun run build
         working-directory: packages/react-use-cache
+      - run: bun run build
+        working-directory: examples/vite
