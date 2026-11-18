@@ -112,7 +112,8 @@ const DEFAULT_OPTIONS = {
  * errors that should spam production consoles.
  */
 function devWarn(message: string) {
-	if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'production') return
+	// written out in full so bundlers can replace and eliminate it in production
+	if (process.env.NODE_ENV === 'production') return
 
 	console.warn(message)
 }
@@ -483,6 +484,27 @@ export class Cache {
 	}
 
 	/**
+	 * Whether aborting `key` is allowed. Always true unless the key has more than
+	 * one live subscriber and the entry opted out with `allowSharedAbort: false`.
+	 * Shared aborts emit a development warning either way.
+	 */
+	#canAbort(key: string, entry: Cache.Entry) {
+		const allowShared = entry.allowSharedAbort ?? this.opts.allowSharedAbort
+		const watchers = this.#subscriptions.get(key)?.listeners.size ?? 0
+
+		if (watchers <= 1) return true
+
+		devWarn(
+			`[react-use-cache] cancelling "${key}", which ${watchers} subscribers are still using. ` +
+				(allowShared
+					? 'It proceeded anyway; set allowSharedAbort: false on the cached() call to refuse.'
+					: 'The abort was refused. Set allowSharedAbort: true to force it.'),
+		)
+
+		return allowShared
+	}
+
+	/**
 	 * Cancel the request behind `key` and remove the entry from the cache
 	 * immediately.
 	 *
@@ -512,20 +534,7 @@ export class Cache {
 	abort(key: string) {
 		const entry = this.peek(key)
 		if (!entry) return false
-
-		const allowShared = entry.allowSharedAbort ?? this.opts.allowSharedAbort
-		const watchers = this.#subscriptions.get(key)?.listeners.size ?? 0
-
-		if (watchers > 1) {
-			devWarn(
-				`[react-use-cache] abort("${key}") is cancelling a request ${watchers} subscribers are still using. ` +
-					(allowShared
-						? 'It proceeded anyway; set allowSharedAbort: false on the cached() call to refuse.'
-						: 'The abort was refused. Set allowSharedAbort: true to force it.'),
-			)
-
-			if (!allowShared) return false
-		}
+		if (!this.#canAbort(key, entry)) return false
 
 		entry.controller.abort()
 
@@ -559,6 +568,9 @@ export class Cache {
 	 * `cacheErrors: false`) are notified too, so they re-read instead of keeping
 	 * stale data.
 	 *
+	 * Entries that refuse shared cancellation (`allowSharedAbort: false`) are
+	 * dropped and bumped but left running.
+	 *
 	 * @returns The number of entries that were removed from the cache.
 	 */
 	clear() {
@@ -566,7 +578,10 @@ export class Cache {
 		const keys = new Set([...this.cache.keys(), ...this.#subscriptions.keys()])
 
 		for (const key of keys) {
-			this.cache.get(key)?.controller.abort()
+			const entry = this.cache.get(key)
+
+			if (entry && this.#canAbort(key, entry)) entry.controller.abort()
+
 			this.cache.delete(key)
 			this.bump(key)
 		}
@@ -616,7 +631,9 @@ export class Cache {
 		return () => {
 			sub.listeners.delete(cb)
 
-			if (sub.listeners.size === 0) {
+			// only drop the slot if the map still points at it. A stale cleanup
+			// (unsubscribe called twice) must not delete a newer slot for the key.
+			if (sub.listeners.size === 0 && this.#subscriptions.get(key) === sub) {
 				this.#subscriptions.delete(key)
 			}
 		}

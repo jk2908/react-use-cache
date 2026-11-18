@@ -368,6 +368,21 @@ describe('Cache', () => {
 		expect(cache.version('user:1')).toBe(0)
 	})
 
+	test('unsubscribing twice does not delete a newer version slot', () => {
+		const cache = new Cache()
+
+		const unsub = cache.subscribe('user:1', () => {})
+		unsub()
+
+		cache.subscribe('user:1', () => {})
+
+		// a stale cleanup must not take the new subscriber's slot with it
+		unsub()
+
+		cache.invalidate('user:1')
+		expect(cache.version('user:1')).toBe(1)
+	})
+
 	test('version is 0 for keys with no subscriber', () => {
 		const cache = new Cache()
 
@@ -392,6 +407,42 @@ describe('Cache', () => {
 		expect(cache.clear()).toBe(2)
 		expect(seen.toSorted()).toEqual(['post:1', 'user:1', 'user:2'])
 		expect(cache.size).toBe(0)
+	})
+
+	test('clear respects allowSharedAbort: false', async () => {
+		const cache = new Cache()
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+		let aborted = false
+		let resolveIt!: (value: string) => void
+
+		try {
+			const read = cache.read(
+				'user:1',
+				({ signal }) =>
+					new Promise<string>((resolve, reject) => {
+						resolveIt = resolve
+						signal.addEventListener('abort', () => {
+							aborted = true
+							reject(new DOMException('Aborted', 'AbortError'))
+						})
+					}),
+				{ allowSharedAbort: false },
+			)
+
+			cache.subscribe('user:1', () => {})
+			cache.subscribe('user:1', () => {})
+
+			expect(cache.clear()).toBe(1)
+			expect(cache.has('user:1')).toBe(false)
+			expect(aborted).toBe(false)
+			expect(warn).toHaveBeenCalled()
+
+			// the request was left running, so it still resolves
+			resolveIt('done')
+			await expect(read).resolves.toBe('done')
+		} finally {
+			warn.mockRestore()
+		}
 	})
 
 	test('abort returns false for a missing key', () => {
