@@ -437,7 +437,7 @@ export class Cache {
 
 							let timer: ReturnType<typeof setTimeout>
 
-							const onAbort = () => {
+							function onAbort() {
 								clearTimeout(timer)
 								resolve()
 							}
@@ -548,19 +548,21 @@ export class Cache {
 	}
 
 	/**
-	 * Clear the entire cache, removing all entries and notifying the subscriber
-	 * of each cleared key. The subscription map is bounded by active subscribers
-	 * (see {@link subscribe}), so no separate sweep is needed here.
+	 * Clear the entire cache, removing all entries and notifying every subscriber.
+	 * Subscribers whose key has no cached entry (evicted, expired, or dropped by
+	 * `cacheErrors: false`) are notified too, so they re-read instead of keeping
+	 * stale data.
 	 *
 	 * @returns The number of entries that were removed from the cache.
 	 */
 	clear() {
 		const entries = [...this.cache.values()]
+		const keys = new Set([...this.cache.keys(), ...this.#subscriptions.keys()])
 
-		for (const entry of entries) {
-			entry.controller.abort()
-			this.cache.delete(entry.key)
-			this.bump(entry.key)
+		for (const key of keys) {
+			this.cache.get(key)?.controller.abort()
+			this.cache.delete(key)
+			this.bump(key)
 		}
 
 		return entries.length
@@ -636,6 +638,9 @@ export class Cache {
 	 * this when invalidating to refresh, so the old request is cancelled rather than left running
 	 * in parallel with the new one.
 	 *
+	 * A predicate is tested against both cached keys and subscribed keys, so a
+	 * subscriber whose entry has already been evicted or expired is still notified.
+	 *
 	 * @param input - The key to invalidate, or a predicate function to match keys to invalidate.
 	 * @param opts - Optional invalidation options.
 	 *
@@ -663,7 +668,7 @@ export class Cache {
 			return
 		}
 
-		for (const key of this.cache.keys()) {
+		for (const key of new Set([...this.cache.keys(), ...this.#subscriptions.keys()])) {
 			if (input(key)) {
 				drop(key)
 			}

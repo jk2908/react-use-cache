@@ -329,7 +329,9 @@ cache.invalidate(key => key.startsWith('user:'))
 
 `invalidate` accepts a predicate, so prefix-style invalidation needs no extra
 API. Every matching key is dropped and its version bumped, notifying any
-`useVersion` subscribers. The underlying aborting variant,
+`useVersion` subscribers. The predicate also runs against subscribed keys whose
+entry is no longer cached, so those consumers refetch instead of keeping stale
+data. The underlying aborting variant,
 `cache.invalidate(predicate, { abort: true })` is also available.
 
 ## License

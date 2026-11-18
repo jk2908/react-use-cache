@@ -371,9 +371,11 @@ describe('Cache', () => {
 		const seen: string[] = []
 		cache.subscribe('user:1', () => seen.push('user:1'))
 		cache.subscribe('post:1', () => seen.push('post:1'))
+		// subscribed, but never cached
+		cache.subscribe('user:2', () => seen.push('user:2'))
 
 		expect(cache.clear()).toBe(2)
-		expect(seen.toSorted()).toEqual(['post:1', 'user:1'])
+		expect(seen.toSorted()).toEqual(['post:1', 'user:1', 'user:2'])
 		expect(cache.size).toBe(0)
 	})
 
@@ -523,6 +525,8 @@ describe('Cache', () => {
 		cache.subscribe('user:1', () => seen.push('user:1'))
 		cache.subscribe('user:2', () => seen.push('user:2'))
 		cache.subscribe('post:1', () => seen.push('post:1'))
+		// subscribed, but never cached
+		cache.subscribe('user:3', () => seen.push('user:3'))
 
 		// predicate is the canonical way to invalidate keys sharing a prefix
 		cache.invalidate(key => key.startsWith('user:'))
@@ -531,8 +535,8 @@ describe('Cache', () => {
 		expect(cache.has('user:2')).toBe(false)
 		expect(cache.has('post:1')).toBe(true)
 
-		// only the user:* subscribers were notified
-		expect(seen.toSorted()).toEqual(['user:1', 'user:2'])
+		// subscribed keys are notified even when they have no entry
+		expect(seen.toSorted()).toEqual(['user:1', 'user:2', 'user:3'])
 	})
 })
 
