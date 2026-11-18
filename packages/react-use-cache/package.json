@@ -39,7 +39,7 @@
 		"access": "public"
 	},
 	"scripts": {
-		"build": "bun run ./build.ts && bun x tsc --project tsconfig.json --emitDeclarationOnly",
+		"build": "rm -rf dist && tsc --project tsconfig.json",
 		"prepack": "bun run build",
 		"test": "bunx vitest"
 	},
@@ -57,7 +57,7 @@
 		"react": "^19.2.7",
 		"react-dom": "^19.2.7",
 		"react-error-boundary": "^6.1.2",
-		"typescript": "^5",
+		"typescript": "^7",
 		"vitest": "^4.1.10"
 	},
 	"peerDependencies": {
